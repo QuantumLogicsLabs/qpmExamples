@@ -1,0 +1,15 @@
+{
+  "name": "qpm-test-react",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-world install target for qpm's dependency resolver: React + react-router-dom pull in a shallow but realistic transitive dependency tree (scheduler, loose-envify, @remix-run/router, ...).",
+  "scripts": {
+    "start": "echo qpm-test-react: start script ran ok",
+    "build": "echo qpm-test-react: build script ran ok"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.0"
+  }
+}

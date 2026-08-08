@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quantum &mdash; one language, every syntax</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top">
+      <span class="brand-mark">Q</span>
+      <span>Quantum</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#code">Syntax</a>
+      <a href="#qpm">qpm</a>
+      <a href="#get-started">Get started</a>
+    </nav>
+    <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="hero-inner">
+      <p class="eyebrow">v2.0.0 &middot; bytecode VM</p>
+      <h1>One language.<br />Every syntax you already know.</h1>
+      <p class="lede">
+        Quantum is a dynamically typed scripting language that accepts
+        Python-style, JavaScript-style, and C-style syntax &mdash; in the
+        same file. Lexer &rarr; parser &rarr; type checker &rarr; single-pass
+        bytecode compiler &rarr; stack-based VM.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#get-started">Get started</a>
+        <a class="btn btn-ghost" href="#code">See the syntax</a>
+      </div>
+      <div class="hero-stats">
+        <div><strong>3</strong><span>binaries, one pipeline</span></div>
+        <div><strong>5</strong><span>dialects on one VM</span></div>
+        <div><strong>0</strong><span>runtimes required</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="features" id="features">
+    <div class="section-head">
+      <p class="eyebrow">Why Quantum</p>
+      <h2>Built to run anything, ship as one file.</h2>
+    </div>
+    <div class="feature-grid">
+      <article class="feature-card">
+        <div class="feature-icon">&#9889;</div>
+        <h3>Multi-syntax front end</h3>
+        <p>.sa, .js, .py, .rb, .c, and .cpp all compile through the same pipeline &mdash; no node, python, or gcc required.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">&#128736;&#65039;</div>
+        <h3>Bytecode VM</h3>
+        <p>A single-pass compiler emits bytecode for a stack-based VM, with closures, upvalues, and first-class pointers.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">&#128269;</div>
+        <h3>Warnings, never blocks</h3>
+        <p>The type checker flags issues without stopping you &mdash; dynamically typed means dynamically typed.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">&#128230;</div>
+        <h3>Standalone .exe bundling</h3>
+        <p><code>quantum hello.sa</code> compiles, bundles the bytecode onto a stub runtime, and runs the result &mdash; one file, no install.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">&#127760;</div>
+        <h3>qpm, a real npm client</h3>
+        <p>A standalone package manager that talks to the npm registry directly &mdash; no npm or Node.js required to install.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">&#10024;</div>
+        <h3>REPL included</h3>
+        <p>Run <code>qrun</code> with no arguments to drop straight into an interactive Quantum session.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="code-section" id="code">
+    <div class="section-head">
+      <p class="eyebrow">Same file, three dialects</p>
+      <h2>Write it the way you already think.</h2>
+    </div>
+    <div class="code-window">
+      <div class="code-window-bar">
+        <span class="dot dot-red"></span>
+        <span class="dot dot-yellow"></span>
+        <span class="dot dot-green"></span>
+        <span class="code-window-title">fibonacci.sa</span>
+      </div>
+      <pre class="code-body"><code><span class="tok-kw">def</span> <span class="tok-fn">fib</span>(n) {
+    <span class="tok-kw">if</span> (n <= 1) <span class="tok-kw">return</span> n;
+    <span class="tok-kw">return</span> <span class="tok-fn">fib</span>(n - 1) + <span class="tok-fn">fib</span>(n - 2);
+}
+
+<span class="tok-kw">for</span> i <span class="tok-kw">in</span> <span class="tok-fn">range</span>(0, 10):
+    <span class="tok-fn">print</span>(<span class="tok-fn">fib</span>(i))
+
+<span class="tok-comment"># Python-style, C-style, JS-style &mdash; pick what fits the line.</span></code></pre>
+    </div>
+  </section>
+
+  <section class="qpm-section" id="qpm">
+    <div class="section-head">
+      <p class="eyebrow">Package management</p>
+      <h2>qpm installs real npm packages. No npm required.</h2>
+      <p class="section-sub">
+        A standalone binary that talks to <code>registry.npmjs.org</code> directly &mdash;
+        resolves semver ranges, downloads tarballs, and extracts them into
+        <code>node_modules</code> itself.
+      </p>
+    </div>
+    <div class="terminal">
+      <div class="code-window-bar">
+        <span class="dot dot-red"></span>
+        <span class="dot dot-yellow"></span>
+        <span class="dot dot-green"></span>
+        <span class="code-window-title">terminal</span>
+      </div>
+      <pre class="terminal-body" id="terminalBody"></pre>
+    </div>
+  </section>
+
+  <section class="get-started" id="get-started">
+    <div class="get-started-inner">
+      <h2>This page is the demo.</h2>
+      <p>
+        It's a static site served by Express, fetched with
+        <code>qpm install</code> and launched with <code>qpm run dev</code> &mdash;
+        same workflow as <code>npm run dev</code>, minus needing npm to get the
+        dependencies in the first place.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/QuantumLogicsLabs" target="_blank" rel="noopener">View the project</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <span>Quantum Language &middot; served locally by qpm run dev</span>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>

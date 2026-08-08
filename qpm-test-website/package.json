@@ -1,0 +1,12 @@
+{
+  "name": "qpm-test-website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Quantum Language showcase site, served by an Express dev server launched via `qpm run dev`. Exercises qpm's installer against a real ~30-package dependency tree (Express) and its script runner against a real long-running Node process, not just a one-shot echo.",
+  "scripts": {
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

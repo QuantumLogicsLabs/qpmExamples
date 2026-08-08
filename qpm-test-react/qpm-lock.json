@@ -1,0 +1,37 @@
+{
+  "lockfileVersion": 1,
+  "packages": {
+    "node_modules/react": {
+      "version": "18.3.1",
+      "resolved": "https://registry.npmjs.org/react/-/react-18.3.1.tgz"
+    },
+    "node_modules/loose-envify": {
+      "version": "1.4.0",
+      "resolved": "https://registry.npmjs.org/loose-envify/-/loose-envify-1.4.0.tgz"
+    },
+    "node_modules/js-tokens": {
+      "version": "4.0.0",
+      "resolved": "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz"
+    },
+    "node_modules/react-dom": {
+      "version": "18.3.1",
+      "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-18.3.1.tgz"
+    },
+    "node_modules/scheduler": {
+      "version": "0.23.2",
+      "resolved": "https://registry.npmjs.org/scheduler/-/scheduler-0.23.2.tgz"
+    },
+    "node_modules/react-router-dom": {
+      "version": "6.30.4",
+      "resolved": "https://registry.npmjs.org/react-router-dom/-/react-router-dom-6.30.4.tgz"
+    },
+    "node_modules/@remix-run/router": {
+      "version": "1.23.3",
+      "resolved": "https://registry.npmjs.org/@remix-run/router/-/router-1.23.3.tgz"
+    },
+    "node_modules/react-router": {
+      "version": "6.30.4",
+      "resolved": "https://registry.npmjs.org/react-router/-/react-router-6.30.4.tgz"
+    }
+  }
+}
