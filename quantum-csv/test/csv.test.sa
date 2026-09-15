@@ -1,0 +1,82 @@
+# @use quantum-test
+# @use ../index.sa
+
+describe("CSV.parse", fn() {
+    it("parses a header row into records with numbers", fn() {
+        let rows = CSV.parse("name,age,score\nAda,36,9.5\nAlan,41,-2\n")
+        expect(rows).toEqual([
+            {"name": "Ada", "age": 36, "score": 9.5},
+            {"name": "Alan", "age": 41, "score": -2}
+        ])
+    })
+    it("handles quotes, escaped quotes, delimiters and newlines in fields", fn() {
+        let text = "id,quote\n1,\"Hello, \"\"world\"\"\"\n2,\"line one\nline two\"\n"
+        let rows = CSV.parse(text)
+        expect(rows[0]["quote"]).toBe("Hello, \"world\"")
+        expect(rows[1]["quote"]).toBe("line one\nline two")
+    })
+    it("handles CRLF, BOM, blank lines and missing cells", fn() {
+        let text = chr(239) + chr(187) + chr(191) + "a,b\r\n1,2\r\n\r\n3\r\n"
+        expect(CSV.parse(text)).toEqual([{"a": 1, "b": 2}, {"a": 3, "b": null}])
+    })
+    it("returns raw rows without a header", fn() {
+        expect(CSV.parse("x;y\n1;2", {"header": false, "delimiter": ";"})).toEqual([["x", "y"], [1, 2]])
+    })
+    it("respects numbers and trim options", fn() {
+        expect(CSV.parse(" a , b \n 007 , 02134 \n", {"header": false})).toEqual([["a", "b"], ["007", "02134"]])
+        expect(CSV.parse("v\n42\n", {"numbers": false})).toEqual([{"v": "42"}])
+        expect(CSV.parse("v\n\" padded \"\n")).toEqual([{"v": " padded "}])
+        expect(CSV.parse(" x \n", {"header": false, "trim": false, "numbers": false})).toEqual([[" x "]])
+    })
+    it("keeps empty trailing fields and rejects broken quotes", fn() {
+        expect(CSV.parse("a,b,c\n1,,\n")).toEqual([{"a": 1, "b": "", "c": ""}])
+        expect(fn() { CSV.parse("a\n\"open") }).toThrow()
+    })
+    it("parses tab-separated values", fn() {
+        expect(CSV.parse("k\tv\nx\t1\n", {"delimiter": "\t"})).toEqual([{"k": "x", "v": 1}])
+    })
+})
+
+describe("CSV.stringify", fn() {
+    it("writes records with a header", fn() {
+        let text = CSV.stringify([{"name": "Ada", "age": 36}, {"name": "Alan", "age": 41}], {"columns": ["name", "age"]})
+        expect(text).toBe("name,age\nAda,36\nAlan,41\n")
+    })
+    it("quotes only when needed", fn() {
+        let text = CSV.stringify([["plain", "has,comma", "has \"quote\"", "multi\nline", " pad ", null]])
+        expect(text).toBe("plain,\"has,comma\",\"has \"\"quote\"\"\",\"multi\nline\",\" pad \",\n")
+    })
+    it("round-trips through parse", fn() {
+        let records = [
+            {"id": 1, "text": "Tom & \"Jerry\", friends", "note": "a\nb"},
+            {"id": 2, "text": "plain", "note": ""}
+        ]
+        let back = CSV.parse(CSV.stringify(records, {"columns": ["id", "text", "note"]}))
+        expect(back).toEqual(records)
+    })
+    it("unions columns and supports other delimiters", fn() {
+        let text = CSV.stringify([{"a": 1}, {"a": 2, "b": 3}], {"delimiter": ";"})
+        let lines = text.trim().split("\n")
+        expect(len(lines)).toBe(3)
+        expect(lines[0].contains("a") and lines[0].contains("b")).toBeTruthy()
+        expect(CSV.stringify([])).toBe("")
+        expect(CSV.stringify([{"x": 1}], {"header": false})).toBe("1\n")
+    })
+})
+
+describe("CSV files & helpers", fn() {
+    it("writes and reads files", fn() {
+        let rows = [{"city": "Lahore", "pop": 13000000}, {"city": "Oslo", "pop": 709000}]
+        CSV.writeFile("build/cities.csv", rows, {"columns": ["city", "pop"]})
+        expect(CSV.readFile("build/cities.csv")).toEqual(rows)
+        expect(fn() { CSV.readFile("build/missing.csv") }).toThrow()
+    })
+    it("selects, filters and renames", fn() {
+        let rows = CSV.parse("First Name,team\nAda,red\nAlan,blue\nGrace,red\n")
+        expect(CSV.column(rows, "First Name")).toEqual(["Ada", "Alan", "Grace"])
+        expect(len(CSV.where(rows, "team", "red"))).toBe(2)
+        expect(CSV.renameColumns(rows, {"First Name": "first"})[0]).toEqual({"first": "Ada", "team": "red"})
+    })
+})
+
+Test.report()

@@ -1,0 +1,190 @@
+# quantum-random — random values, ids and passwords for Quantum
+#
+#   Random.integer(1, 6)                 # dice roll
+#   Random.pick(["red", "green"])        # one item
+#   Random.shuffle(deck)                 # shuffled copy
+#   Random.uuid()                        # "3f2b8c1e-9a4d-4f6b-8e2a-1c5d7e9f0a3b"
+#   Random.password(16)                  # mixed-case letters, digits and symbols
+#   rng = SeededRandom(42)               # reproducible sequence for tests & games
+#
+# Random uses the VM's generators (secure_random_* for ids and passwords).
+# Exposes globals: Random, SeededRandom
+
+# Shared helpers; `source` is any object with a next() method returning [0, 1).
+class __QRandomBase {
+    fn next() { return rand() }
+
+    # Integer in [lo, hi], both inclusive.
+    fn integer(lo, hi) {
+        return lo + floor(self.next() * (hi - lo + 1))
+    }
+
+    # Float in [lo, hi).
+    fn decimal(lo, hi) {
+        return lo + self.next() * (hi - lo)
+    }
+
+    # true with probability p (default 0.5).
+    fn chance(p) {
+        if p == null { p = 0.5 }
+        return self.next() < p
+    }
+
+    fn pick(arr) {
+        if len(arr) == 0 { return null }
+        return arr[self.integer(0, len(arr) - 1)]
+    }
+
+    # Picks using relative weights: weightedPick(["common", "rare"], [9, 1])
+    fn weightedPick(items, weights) {
+        let total = 0
+        for w in weights { total += w }
+        let r = self.next() * total
+        for i in range(len(items)) {
+            r -= weights[i]
+            if r < 0 { return items[i] }
+        }
+        return items[len(items) - 1]
+    }
+
+    # Fisher-Yates shuffle of a copy.
+    fn shuffle(arr) {
+        let out = arr.slice(0)
+        for i in range(len(out) - 1, 0, -1) {
+            let j = self.integer(0, i)
+            let t = out[i]
+            out[i] = out[j]
+            out[j] = t
+        }
+        return out
+    }
+
+    # k distinct items (without replacement).
+    fn sample(arr, k) {
+        return self.shuffle(arr).slice(0, min(k, len(arr)))
+    }
+
+    # Random text from an alphabet (default: letters and digits).
+    fn token(length, alphabet) {
+        if alphabet == null { alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" }
+        let out = ""
+        for i in range(length) { out += alphabet[self.integer(0, len(alphabet) - 1)] }
+        return out
+    }
+
+    # "#a1b2c3"
+    fn color() {
+        let hexDigits = "0123456789abcdef"
+        let out = "#"
+        for i in range(6) { out += hexDigits[self.integer(0, 15)] }
+        return out
+    }
+
+    # Normally distributed number (Box-Muller).
+    fn gaussian(mean, stdDev) {
+        if mean == null { mean = 0 }
+        if stdDev == null { stdDev = 1 }
+        let u = 0
+        while u == 0 { u = self.next() }
+        let v = self.next()
+        return mean + stdDev * sqrt(-2 * log(u)) * cos(2 * PI * v)
+    }
+
+    # Dice notation: roll("2d6+3") -> {"total", "rolls"}
+    fn roll(notation) {
+        let spec = notation.lower().replaceAll(" ", "")
+        let bonus = 0
+        let plus = spec.indexOf("+")
+        let minus = spec.indexOf("-")
+        if plus != -1 {
+            bonus = num(spec.slice(plus + 1))
+            spec = spec.slice(0, plus)
+        } else if minus != -1 {
+            bonus = -num(spec.slice(minus + 1))
+            spec = spec.slice(0, minus)
+        }
+        let d = spec.indexOf("d")
+        if d == -1 { raise "invalid dice notation: " + notation }
+        let count = d == 0 ? 1 : num(spec.slice(0, d))
+        let sides = num(spec.slice(d + 1))
+        let rolls = []
+        let total = bonus
+        for i in range(count) {
+            let r = self.integer(1, sides)
+            rolls.push(r)
+            total += r
+        }
+        return {"total": total, "rolls": rolls}
+    }
+}
+
+class __QRandom extends __QRandomBase {
+    # Cryptographically strong integer in [lo, hi].
+    fn secureInteger(lo, hi) {
+        return secure_random_int(lo, hi)
+    }
+
+    # Random hex string with `bytes` bytes of entropy (2 hex chars per byte).
+    fn hex(bytes) {
+        return secure_random_hex(bytes)
+    }
+
+    # RFC 4122 version 4 UUID.
+    fn uuid() {
+        let h = secure_random_hex(16)
+        let variant = "89ab"[secure_random_int(0, 3)]
+        return h.slice(0, 8) + "-" + h.slice(8, 12) + "-4" + h.slice(13, 16) + "-" + variant + h.slice(17, 20) + "-" + h.slice(20, 32)
+    }
+
+    # Password with at least one character from every enabled class.
+    # options: {"upper": true, "lower": true, "digits": true, "symbols": true, "exclude": "0O1lI"}
+    fn password(length, options) {
+        if length == null { length = 16 }
+        if options == null { options = {} }
+        let classes = []
+        if options.get("upper", true) { classes.push("ABCDEFGHIJKLMNOPQRSTUVWXYZ") }
+        if options.get("lower", true) { classes.push("abcdefghijklmnopqrstuvwxyz") }
+        if options.get("digits", true) { classes.push("0123456789") }
+        if options.get("symbols", true) { classes.push("!@$%^&*()-_=+[]{};:,.?") }
+        let exclude = options.get("exclude", "")
+        if exclude != "" {
+            classes = classes.map(fn(cls) {
+                let kept = ""
+                for ch in cls.chars() {
+                    if not exclude.contains(ch) { kept += ch }
+                }
+                return kept
+            }).filter(fn(cls) { return cls != "" })
+        }
+        if len(classes) == 0 { raise "password needs at least one character class" }
+        if length < len(classes) { raise "password length must be at least " + str(len(classes)) }
+
+        let chars = []
+        for cls in classes { chars.push(cls[secure_random_int(0, len(cls) - 1)]) }
+        let all = classes.join("")
+        while len(chars) < length { chars.push(all[secure_random_int(0, len(all) - 1)]) }
+        # Secure Fisher-Yates so the guaranteed characters are not always first.
+        for i in range(len(chars) - 1, 0, -1) {
+            let j = secure_random_int(0, i)
+            let t = chars[i]
+            chars[i] = chars[j]
+            chars[j] = t
+        }
+        return chars.join("")
+    }
+}
+
+# Deterministic generator (Park-Miller minimal standard): same seed, same sequence.
+class SeededRandom extends __QRandomBase {
+    fn init(seed) {
+        if seed == null { seed = 1 }
+        self.state = ((floor(abs(seed)) % 2147483646) + 1)
+    }
+
+    fn next() {
+        self.state = (self.state * 48271) % 2147483647
+        return (self.state - 1) / 2147483646
+    }
+}
+
+Random = __QRandom()

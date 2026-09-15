@@ -1,0 +1,413 @@
+# quantum-validate — input validation for Quantum
+#
+#   Validate.isEmail("ada@example.com")                    # true
+#   Validate.passwordStrength("hunter2")["label"]          # "very weak"
+#   result = Validate.check(form, {
+#       "name":  {"type": "string", "required": true, "min": 2},
+#       "age":   {"type": "integer", "min": 18},
+#       "email": {"type": "email", "required": true},
+#       "role":  {"oneOf": ["admin", "user"]}
+#   })
+#   if not result["valid"] { print(result["errors"]) }
+#
+# Exposes the global: Validate
+
+class __QValidate {
+    # ── character classes ────────────────────────────────────────────────
+
+    fn isDigitChar(ch) {
+        let c = ord(ch)
+        return c >= 48 and c <= 57
+    }
+
+    fn isLetterChar(ch) {
+        let c = ord(ch)
+        return (c >= 65 and c <= 90) or (c >= 97 and c <= 122)
+    }
+
+    fn isHexChar(ch) {
+        let c = ord(ch.lower())
+        return (c >= 48 and c <= 57) or (c >= 97 and c <= 102)
+    }
+
+    fn allChars(s, pred) {
+        if type(s) != "string" or s == "" { return false }
+        for ch in s.chars() {
+            if not pred(ch) { return false }
+        }
+        return true
+    }
+
+    # ── strings ──────────────────────────────────────────────────────────
+
+    fn isAlpha(s) { return self.allChars(s, fn(ch) { return Validate.isLetterChar(ch) }) }
+    fn isDigits(s) { return self.allChars(s, fn(ch) { return Validate.isDigitChar(ch) }) }
+    fn isAlphanumeric(s) {
+        return self.allChars(s, fn(ch) { return Validate.isLetterChar(ch) or Validate.isDigitChar(ch) })
+    }
+    fn isHex(s) { return self.allChars(s, fn(ch) { return Validate.isHexChar(ch) }) }
+
+    # "-12", "3.5", "+0.25" (no exponents, no spaces)
+    fn isNumeric(s) {
+        if type(s) != "string" { return false }
+        let body = s
+        if body.startsWith("-") or body.startsWith("+") { body = body.slice(1) }
+        let parts = body.split(".")
+        if len(parts) > 2 { return false }
+        if len(parts) == 1 { return self.isDigits(parts[0]) }
+        if parts[0] == "" and parts[1] == "" { return false }
+        return (parts[0] == "" or self.isDigits(parts[0])) and (parts[1] == "" or self.isDigits(parts[1]))
+    }
+
+    fn isIntegerString(s) {
+        if type(s) != "string" { return false }
+        let body = s
+        if body.startsWith("-") or body.startsWith("+") { body = body.slice(1) }
+        return self.isDigits(body)
+    }
+
+    fn lengthBetween(s, lo, hi) {
+        return len(s) >= lo and len(s) <= hi
+    }
+
+    fn inRange(n, lo, hi) {
+        return type(n) == "number" and n >= lo and n <= hi
+    }
+
+    # Letter first, then letters/digits/underscore; 3-20 chars by default.
+    fn isUsername(s, minLen, maxLen) {
+        if minLen == null { minLen = 3 }
+        if maxLen == null { maxLen = 20 }
+        if type(s) != "string" or not self.lengthBetween(s, minLen, maxLen) { return false }
+        if not self.isLetterChar(s[0]) { return false }
+        return self.allChars(s, fn(ch) { return Validate.isLetterChar(ch) or Validate.isDigitChar(ch) or ch == "_" })
+    }
+
+    # ── internet ─────────────────────────────────────────────────────────
+
+    fn isDomain(s) {
+        if type(s) != "string" or len(s) > 253 { return false }
+        let labels = s.split(".")
+        if len(labels) < 2 { return false }
+        for label in labels {
+            if label == "" or len(label) > 63 { return false }
+            if label.startsWith("-") or label.endsWith("-") { return false }
+            if not self.allChars(label, fn(ch) { return Validate.isLetterChar(ch) or Validate.isDigitChar(ch) or ch == "-" }) { return false }
+        }
+        let tld = labels[-1]
+        return len(tld) >= 2 and self.isAlpha(tld)
+    }
+
+    fn isEmail(s) {
+        if type(s) != "string" or len(s) > 254 { return false }
+        let parts = s.split("@")
+        if len(parts) != 2 { return false }
+        let local = parts[0]
+        if local == "" or len(local) > 64 { return false }
+        if local.startsWith(".") or local.endsWith(".") or local.contains("..") { return false }
+        let okLocal = self.allChars(local, fn(ch) {
+            return Validate.isLetterChar(ch) or Validate.isDigitChar(ch) or "._%+-".contains(ch)
+        })
+        return okLocal and self.isDomain(parts[1])
+    }
+
+    fn isIPv4(s) {
+        if type(s) != "string" { return false }
+        let parts = s.split(".")
+        if len(parts) != 4 { return false }
+        for p in parts {
+            if not self.isDigits(p) or len(p) > 3 { return false }
+            if len(p) > 1 and p[0] == "0" { return false }
+            if num(p) > 255 { return false }
+        }
+        return true
+    }
+
+    fn isIPv6(s) {
+        if type(s) != "string" or s == "" { return false }
+        let doubles = s.split("::")
+        if len(doubles) > 2 { return false }
+        let groups = []
+        for chunk in doubles {
+            if chunk != "" {
+                for g in chunk.split(":") { groups.push(g) }
+            }
+        }
+        for g in groups {
+            if g == "" or len(g) > 4 or not self.isHex(g) { return false }
+        }
+        if len(doubles) == 2 { return len(groups) < 8 }
+        return len(groups) == 8
+    }
+
+    fn isPort(p) {
+        if type(p) == "string" {
+            if not self.isDigits(p) { return false }
+            p = num(p)
+        }
+        return self.isIntegerNumber(p) and p >= 1 and p <= 65535
+    }
+
+    # http(s)://host[:port][/path][?query][#hash]; pass schemes to allow others.
+    fn isUrl(s, schemes) {
+        if schemes == null { schemes = ["http", "https"] }
+        if type(s) != "string" { return false }
+        let sep = s.indexOf("://")
+        if sep <= 0 { return false }
+        if not schemes.includes(s.slice(0, sep).lower()) { return false }
+        let rest = s.slice(sep + 3)
+        let hostEnd = len(rest)
+        for marker in ["/", "?", "#"] {
+            let i = rest.indexOf(marker)
+            if i != -1 and i < hostEnd { hostEnd = i }
+        }
+        let hostPort = rest.slice(0, hostEnd)
+        if hostPort.contains("@") or hostPort.contains(" ") or rest.contains(" ") { return false }
+        let host = hostPort
+        let colon = hostPort.indexOf(":")
+        if colon != -1 {
+            host = hostPort.slice(0, colon)
+            if not self.isPort(hostPort.slice(colon + 1)) { return false }
+        }
+        return host == "localhost" or self.isIPv4(host) or self.isDomain(host)
+    }
+
+    fn isHexColor(s) {
+        if type(s) != "string" or not s.startsWith("#") { return false }
+        let body = s.slice(1)
+        return [3, 4, 6, 8].includes(len(body)) and self.isHex(body)
+    }
+
+    fn isUUID(s) {
+        if type(s) != "string" or len(s) != 36 { return false }
+        let groups = s.split("-")
+        if len(groups) != 5 { return false }
+        let sizes = [8, 4, 4, 4, 12]
+        for i in range(5) {
+            if len(groups[i]) != sizes[i] or not self.isHex(groups[i]) { return false }
+        }
+        return true
+    }
+
+    # ── numbers & ids ────────────────────────────────────────────────────
+
+    fn isIntegerNumber(n) {
+        return type(n) == "number" and n == floor(n)
+    }
+
+    # 7-15 digits, optional leading +, common separators ignored.
+    fn isPhone(s) {
+        if type(s) != "string" { return false }
+        let body = s.trim()
+        if body.startsWith("+") { body = body.slice(1) }
+        let digits = ""
+        for ch in body.chars() {
+            if self.isDigitChar(ch) {
+                digits += ch
+            } else if not " -().".contains(ch) {
+                return false
+            }
+        }
+        return len(digits) >= 7 and len(digits) <= 15
+    }
+
+    fn luhn(digits) {
+        let total = 0
+        let double = false
+        for i in range(len(digits) - 1, -1, -1) {
+            let d = num(digits[i])
+            if double {
+                d *= 2
+                if d > 9 { d -= 9 }
+            }
+            total += d
+            double = not double
+        }
+        return total % 10 == 0
+    }
+
+    fn isCreditCard(s) {
+        if type(s) != "string" { return false }
+        let digits = s.replaceAll(" ", "").replaceAll("-", "")
+        return self.isDigits(digits) and len(digits) >= 13 and len(digits) <= 19 and self.luhn(digits)
+    }
+
+    # "YYYY-MM-DD" that exists on the calendar.
+    fn isDate(s) {
+        if type(s) != "string" or len(s) != 10 or s[4] != "-" or s[7] != "-" { return false }
+        let y = s.slice(0, 4)
+        let m = s.slice(5, 7)
+        let d = s.slice(8, 10)
+        if not (self.isDigits(y) and self.isDigits(m) and self.isDigits(d)) { return false }
+        let month = num(m)
+        let day = num(d)
+        if month < 1 or month > 12 or day < 1 { return false }
+        let year = num(y)
+        let leap = (year % 4 == 0 and year % 100 != 0) or year % 400 == 0
+        let days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        return day <= days[month - 1]
+    }
+
+    # ── passwords ────────────────────────────────────────────────────────
+
+    # Returns {"score": 0-4, "label", "suggestions": [...]}.
+    fn passwordStrength(pw) {
+        let suggestions = []
+        let hasLower = false
+        let hasUpper = false
+        let hasDigit = false
+        let hasSymbol = false
+        for ch in pw.chars() {
+            if self.isDigitChar(ch) {
+                hasDigit = true
+            } else if self.isLetterChar(ch) {
+                if ch == ch.upper() { hasUpper = true } else { hasLower = true }
+            } else {
+                hasSymbol = true
+            }
+        }
+        let variety = 0
+        for flag in [hasLower, hasUpper, hasDigit, hasSymbol] {
+            if flag { variety += 1 }
+        }
+        let score = 0
+        if len(pw) >= 8 { score += 1 }
+        if len(pw) >= 12 { score += 1 }
+        if variety >= 3 { score += 1 }
+        if variety == 4 { score += 1 }
+
+        let common = ["password", "123456", "qwerty", "letmein", "admin", "welcome", "abc123", "iloveyou"]
+        for c in common {
+            if pw.lower().contains(c) {
+                score = 0
+                suggestions.push("avoid common words like '" + c + "'")
+            }
+        }
+        if len(pw) < 12 { suggestions.push("use at least 12 characters") }
+        if not hasUpper { suggestions.push("add an uppercase letter") }
+        if not hasLower { suggestions.push("add a lowercase letter") }
+        if not hasDigit { suggestions.push("add a number") }
+        if not hasSymbol { suggestions.push("add a symbol") }
+
+        let labels = ["very weak", "weak", "fair", "strong", "very strong"]
+        return {"score": score, "label": labels[score], "suggestions": suggestions}
+    }
+
+    fn isStrongPassword(pw, minScore) {
+        if minScore == null { minScore = 3 }
+        return self.passwordStrength(pw)["score"] >= minScore
+    }
+
+    # ── schema validation ────────────────────────────────────────────────
+
+    # Rules per field:
+    #   type      "string" "number" "integer" "boolean" "array" "dict"
+    #             "email" "url" "uuid" "date" "phone" "ipv4"
+    #   required  true -> missing/null is an error (otherwise missing is fine)
+    #   min, max  length for strings/arrays, value for numbers
+    #   oneOf     allowed values
+    #   schema    nested rules for a dict value
+    #   items     rules applied to every element of an array value
+    #   custom    fn(value) returning true, or an error message string
+    #   message   replaces every generated message for that field
+    # Returns {"valid": bool, "errors": [{"field", "message"}]}
+    fn check(data, schema) {
+        let errors = []
+        self.checkInto(data, schema, "", errors)
+        return {"valid": len(errors) == 0, "errors": errors}
+    }
+
+    fn checkInto(data, schema, prefix, errors) {
+        if type(data) != "dict" {
+            errors.push({"field": prefix == "" ? "(root)" : prefix, "message": "must be an object"})
+            return
+        }
+        for field in schema.keys() {
+            let path = prefix == "" ? field : prefix + "." + field
+            let value = data.get(field)
+            self.checkValue(value, schema[field], path, errors)
+        }
+    }
+
+    fn checkValue(value, rule, path, errors) {
+        let before = len(errors)
+        self.applyRule(value, rule, path, errors)
+        if rule.get("message") != null and len(errors) > before {
+            while len(errors) > before { errors.pop() }
+            errors.push({"field": path, "message": rule["message"]})
+        }
+    }
+
+    fn fail(errors, path, message) {
+        errors.push({"field": path, "message": path + " " + message})
+    }
+
+    fn applyRule(value, rule, path, errors) {
+        if value == null {
+            if rule.get("required") { self.fail(errors, path, "is required") }
+            return
+        }
+
+        let kind = rule.get("type")
+        if kind != null and not self.matchesType(value, kind) {
+            self.fail(errors, path, "must be " + (["a", "e", "i", "o", "u"].includes(kind[0]) ? "an " : "a ") + kind)
+            return
+        }
+
+        let lo = rule.get("min")
+        let hi = rule.get("max")
+        if lo != null or hi != null {
+            let measured = value
+            let unit = ""
+            if type(value) == "string" or type(value) == "array" {
+                measured = len(value)
+                unit = type(value) == "string" ? " characters" : " items"
+            }
+            if type(measured) == "number" {
+                if lo != null and measured < lo { self.fail(errors, path, "must be at least " + str(lo) + unit) }
+                if hi != null and measured > hi { self.fail(errors, path, "must be at most " + str(hi) + unit) }
+            }
+        }
+
+        let allowed = rule.get("oneOf")
+        if allowed != null and not allowed.includes(value) {
+            self.fail(errors, path, "must be one of: " + allowed.map(fn(v) { return str(v) }).join(", "))
+        }
+
+        if rule.get("schema") != null and type(value) == "dict" {
+            self.checkInto(value, rule["schema"], path, errors)
+        }
+
+        if rule.get("items") != null and type(value) == "array" {
+            for i in range(len(value)) {
+                self.checkValue(value[i], rule["items"], path + "[" + str(i) + "]", errors)
+            }
+        }
+
+        let custom = rule.get("custom")
+        if custom != null {
+            let verdict = custom(value)
+            if type(verdict) == "string" {
+                self.fail(errors, path, verdict)
+            } else if not verdict {
+                self.fail(errors, path, "is invalid")
+            }
+        }
+    }
+
+    fn matchesType(value, kind) {
+        let t = type(value)
+        if kind == "string" or kind == "number" or kind == "array" or kind == "dict" { return t == kind }
+        if kind == "boolean" or kind == "bool" { return t == "bool" or t == "boolean" }
+        if kind == "integer" { return self.isIntegerNumber(value) }
+        if kind == "email" { return self.isEmail(value) }
+        if kind == "url" { return self.isUrl(value) }
+        if kind == "uuid" { return self.isUUID(value) }
+        if kind == "date" { return self.isDate(value) }
+        if kind == "phone" { return self.isPhone(value) }
+        if kind == "ipv4" { return self.isIPv4(value) }
+        raise "Validate: unknown type '" + kind + "'"
+    }
+}
+
+Validate = __QValidate()

@@ -1,0 +1,99 @@
+# @use quantum-test
+# @use ../index.sa
+
+fn countTo(n) {
+    let out = []
+    for i in range(n) { out.push(i) }
+    return out
+}
+
+describe("Term colors", fn() {
+    it("wraps text in ANSI codes and strips them again", fn() {
+        Term.enabled = true
+        let red = Term.red("hi")
+        expect(red).toBe("[31mhi[0m")
+        expect(Term.style(["bold", "green"], "ok")).toBe("[1;32mok[0m")
+        expect(Term.rgb(255, 128, 0, "o")).toBe("[38;2;255;128;0mo[0m")
+        expect(Term.stripAnsi(Term.bold(red) + "!")).toBe("hi!")
+    })
+    it("emits plain text when disabled", fn() {
+        Term.enabled = false
+        expect(Term.cyan("plain")).toBe("plain")
+        expect(Term.style("bold", 42)).toBe("42")
+        Term.enabled = true
+    })
+    it("measures display width", fn() {
+        expect(Term.width(Term.red("abc"))).toBe(3)
+        expect(Term.width("héllo")).toBe(5)
+        expect(Term.width("✓ ok")).toBe(4)
+        expect(Term.padEnd(Term.red("ab"), 4)).toBe(Term.red("ab") + "  ")
+        expect(Term.padStart("7", 3)).toBe("  7")
+        expect(Term.padCenter("ab", 6)).toBe("  ab  ")
+    })
+})
+
+describe("Term layout", fn() {
+    it("renders tables from arrays", fn() {
+        Term.enabled = false
+        let t = Term.table([["Ada", 36], ["Alan", 1912]], {"headers": ["Name", "Born"], "align": ["left", "right"], "border": "ascii"})
+        expect(t).toBe("+------+------+\n| Name | Born |\n+------+------+\n| Ada  |   36 |\n| Alan | 1912 |\n+------+------+")
+        Term.enabled = true
+    })
+    it("renders tables from dicts with box drawing", fn() {
+        Term.enabled = false
+        let t = Term.table([{"lang": "sa", "ok": true}], {"headers": ["lang", "ok"]})
+        expect(t).toBe("╭──────┬──────╮\n│ lang │ ok   │\n├──────┼──────┤\n│ sa   │ true │\n╰──────┴──────╯")
+        Term.enabled = true
+    })
+    it("draws boxes with titles", fn() {
+        expect(Term.box("hi")).toBe("╭────╮\n│ hi │\n╰────╯")
+        expect(Term.box("Deployed\nv1.2", {"title": "ok", "border": "ascii", "padding": 0})).toBe("+- ok ---+\n|Deployed|\n|v1.2    |\n+--------+")
+    })
+    it("draws progress bars and spinners", fn() {
+        expect(Term.progressBar(5, 10, 10)).toBe("[█████░░░░░]  50%")
+        expect(Term.progressBar(20, 10, 4)).toBe("[████] 100%")
+        expect(Term.progressBar(0, 0, 2)).toBe("[██] 100%")
+        expect(Term.spinner(5, "line")).toBe("\\")
+        expect(Term.divider(3, "=")).toBe("===")
+    })
+    it("formats lists and trees", fn() {
+        expect(Term.bulletList(["a", "b"])).toBe("• a\n• b")
+        expect(Term.numberedList(countTo(10)).split("\n")[0]).toBe(" 1. 0")
+        let tree = Term.tree({"src": ["main.sa", "util.sa"], "version": "1.0"}, "app")
+        expect(tree.contains("app\n")).toBeTruthy()
+        expect(tree.contains("── src")).toBeTruthy()
+        expect(tree.contains("│   ├── main.sa") or tree.contains("    ├── main.sa")).toBeTruthy()
+        expect(tree.contains("── version: 1.0")).toBeTruthy()
+    })
+})
+
+describe("Logger", fn() {
+    it("filters by level and writes through the sink", fn() {
+        Term.enabled = false
+        let lines = []
+        let log = Logger("api", "info")
+        log.sink = fn(line) { lines.push(line) }
+        expect(log.debug("hidden")).toBeFalsy()
+        log.info("started")
+        log.warn("slow")
+        log.setLevel("error")
+        log.warn("filtered")
+        log.error("boom")
+        expect(lines).toEqual(["INFO  [api] started", "WARN  [api] slow", "ERROR [api] boom"])
+        expect(fn() { log.setLevel("loud") }).toThrow()
+        Term.enabled = true
+    })
+    it("creates child loggers and timestamps", fn() {
+        Term.enabled = false
+        let lines = []
+        let root = Logger("app", "debug")
+        root.sink = fn(line) { lines.push(line) }
+        root.timestamps = true
+        root.child("db").success("connected")
+        expect(lines[0].contains("OK    [app:db] connected")).toBeTruthy()
+        expect(lines[0][2]).toBe(":")
+        Term.enabled = true
+    })
+})
+
+Test.report()

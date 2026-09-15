@@ -1,0 +1,155 @@
+# @use quantum-test
+# @use ../index.sa
+
+fn uniqueKeys(arr) {
+    let seen = {}
+    for x in arr { seen[str(x)] = true }
+    return seen
+}
+
+fn countTo(n) {
+    let out = []
+    for i in range(n) { out.push(i) }
+    return out
+}
+
+fn hasAny(s, chars) {
+    for ch in s.chars() {
+        if chars.contains(ch) { return true }
+    }
+    return false
+}
+
+fn allDigits(s) {
+    for ch in s.chars() {
+        if not ch.isdigit() { return false }
+    }
+    return true
+}
+
+describe("Random numbers", fn() {
+    it("keeps integers in range and hits both ends", fn() {
+        let seen = {}
+        let inRange = true
+        for i in range(2000) {
+            let n = Random.integer(1, 6)
+            if n < 1 or n > 6 or n != floor(n) { inRange = false }
+            seen[str(n)] = true
+        }
+        expect(inRange).toBeTruthy()
+        expect(len(seen)).toBe(6)
+    })
+    it("produces decimals, chances and gaussians", fn() {
+        let ok = true
+        for i in range(500) {
+            let x = Random.decimal(-2, 2)
+            if x < -2 or x >= 2 { ok = false }
+        }
+        expect(ok).toBeTruthy()
+        expect(Random.chance(1)).toBeTruthy()
+        expect(Random.chance(0)).toBeFalsy()
+        let total = 0
+        for i in range(2000) { total += Random.gaussian(10, 2) }
+        expect(abs(total / 2000 - 10) < 0.5).toBeTruthy()
+    })
+    it("rolls dice notation", fn() {
+        let r = Random.roll("3d6+2")
+        expect(len(r["rolls"])).toBe(3)
+        expect(r["total"] >= 5 and r["total"] <= 20).toBeTruthy()
+        expect(Random.roll("d20")["rolls"]).toHaveLength(1)
+        expect(Random.roll("2d4-1")["total"] <= 7).toBeTruthy()
+        expect(fn() { Random.roll("banana") }).toThrow()
+    })
+})
+
+describe("Random collections", fn() {
+    it("picks and samples", fn() {
+        let items = ["a", "b", "c", "d"]
+        expect(items).toContain(Random.pick(items))
+        expect(Random.pick([])).toBeNull()
+        let s = Random.sample(items, 3)
+        expect(s).toHaveLength(3)
+        expect(len(uniqueKeys(s))).toBe(3)
+        expect(Random.sample(items, 10)).toHaveLength(4)
+    })
+    it("shuffles a copy without losing items", fn() {
+        let deck = countTo(52)
+        let shuffled = Random.shuffle(deck)
+        expect(sorted(shuffled)).toEqual(deck)
+        expect(deck[0]).toBe(0)
+    })
+    it("respects weights", fn() {
+        let rare = 0
+        for i in range(3000) {
+            if Random.weightedPick(["common", "rare"], [9, 1]) == "rare" { rare += 1 }
+        }
+        expect(rare > 150 and rare < 450).toBeTruthy()
+        expect(Random.weightedPick(["only"], [0])).toBe("only")
+    })
+})
+
+describe("Random ids & secrets", fn() {
+    it("creates tokens, colors and hex", fn() {
+        expect(Random.token(12)).toHaveLength(12)
+        expect(Random.token(8, "01")).toHaveLength(8)
+        let binary = true
+        for ch in Random.token(50, "01").chars() {
+            if ch != "0" and ch != "1" { binary = false }
+        }
+        expect(binary).toBeTruthy()
+        expect(Random.color()).toHaveLength(7)
+        expect(Random.hex(8)).toHaveLength(16)
+        let si = Random.secureInteger(5, 7)
+        expect(si >= 5 and si <= 7).toBeTruthy()
+    })
+    it("creates v4 uuids", fn() {
+        let ids = {}
+        for i in range(50) {
+            let id = Random.uuid()
+            ids[id] = true
+            expect(id).toHaveLength(36)
+            expect(id[14]).toBe("4")
+            expect("89ab").toContain(id[19])
+        }
+        expect(len(ids)).toBe(50)
+    })
+    it("creates passwords with every class", fn() {
+        for i in range(20) {
+            let pw = Random.password(12)
+            expect(pw).toHaveLength(12)
+            expect(hasAny(pw, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")).toBeTruthy()
+            expect(hasAny(pw, "abcdefghijklmnopqrstuvwxyz")).toBeTruthy()
+            expect(hasAny(pw, "0123456789")).toBeTruthy()
+        }
+        let pin = Random.password(6, {"upper": false, "lower": false, "symbols": false})
+        expect(allDigits(pin)).toBeTruthy()
+        let clear = Random.password(200, {"symbols": false, "exclude": "0O1lI"})
+        expect(hasAny(clear, "0O1lI")).toBeFalsy()
+        expect(fn() { Random.password(2) }).toThrow()
+    })
+})
+
+describe("SeededRandom", fn() {
+    it("repeats the same sequence for the same seed", fn() {
+        let a = SeededRandom(42)
+        let b = SeededRandom(42)
+        let c = SeededRandom(7)
+        let seqA = countTo(5).map(fn(i) { return a.integer(1, 1000) })
+        let seqB = countTo(5).map(fn(i) { return b.integer(1, 1000) })
+        let seqC = countTo(5).map(fn(i) { return c.integer(1, 1000) })
+        expect(seqA).toEqual(seqB)
+        expectNot(seqA).toEqual(seqC)
+        expect(SeededRandom(99).shuffle([1, 2, 3, 4, 5])).toEqual(SeededRandom(99).shuffle([1, 2, 3, 4, 5]))
+    })
+    it("stays within [0, 1)", fn() {
+        let rng = SeededRandom(0)
+        let ok = true
+        for i in range(5000) {
+            let x = rng.next()
+            if x < 0 or x >= 1 { ok = false }
+        }
+        expect(ok).toBeTruthy()
+    })
+})
+
+Test.report()

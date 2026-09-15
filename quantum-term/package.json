@@ -1,0 +1,17 @@
+{
+  "name": "quantum-term",
+  "version": "1.0.0",
+  "description": "Terminal UI helpers for Quantum CLIs: ANSI colors, tables, boxes, progress bars, spinners, trees, lists and a leveled Logger.",
+  "main": "index.sa",
+  "keywords": ["quantum", "sa", "terminal", "cli", "color", "table", "progress", "logger"],
+  "license": "MIT",
+  "files": ["index.sa", "README.md"],
+  "scripts": {
+    "test": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa && qrun build/test.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "entry": "test/term.test.sa",
+    "out": "build/test.sa"
+  }
+}

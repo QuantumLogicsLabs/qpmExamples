@@ -1,0 +1,202 @@
+# quantum-events — events, state stores and state machines for Quantum
+#
+#   bus = EventEmitter()
+#   id = bus.on("login", fn(user) { print("hi", user) })
+#   bus.emit("login", "ada")
+#   bus.off(id)
+#
+#   store = Store(fn(state, action) {
+#       if action["type"] == "add" { return {"count": state["count"] + action["by"]} }
+#       return state
+#   }, {"count": 0})
+#   store.subscribe(fn(state) { print(state["count"]) })
+#   store.dispatch({"type": "add", "by": 2})
+#
+#   door = StateMachine("closed", {"closed": {"open": "opened"}, "opened": {"close": "closed"}})
+#   door.send("open")
+#
+# Listeners are removed by the id returned from on()/once()/subscribe(), because
+# Quantum functions cannot be compared with ==.
+# Exposes globals: EventEmitter, Store, StateMachine
+
+class EventEmitter {
+    fn init() {
+        self.listeners = {}      # event -> [{"id", "fn", "once"}]
+        self.nextId = 1
+        self.WILDCARD = "*"
+    }
+
+    fn add(event, handler, once) {
+        let id = self.nextId
+        self.nextId += 1
+        if not (event in self.listeners) { self.listeners[event] = [] }
+        self.listeners[event].push({"id": id, "fn": handler, "once": once})
+        return id
+    }
+
+    # handler(payload); for the "*" event, handler(event, payload). Returns a listener id.
+    fn on(event, handler) { return self.add(event, handler, false) }
+
+    # Like on(), but the listener is removed after its first call.
+    fn once(event, handler) { return self.add(event, handler, true) }
+
+    # Removes a listener by id. Returns true if one was removed.
+    fn off(id) {
+        for event in self.listeners.keys() {
+            let list = self.listeners[event]
+            for i in range(len(list)) {
+                if list[i]["id"] == id {
+                    list.splice(i, 1)
+                    if len(list) == 0 { self.listeners.delete(event) }
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    # Calls every listener for `event` (then "*" listeners). Returns how many ran.
+    fn emit(event, payload) {
+        let count = 0
+        # Snapshot so listeners may add/remove listeners while we iterate.
+        let direct = self.listeners.get(event, []).slice(0)
+        let wild = event == self.WILDCARD ? [] : self.listeners.get(self.WILDCARD, []).slice(0)
+        for l in direct {
+            if l["once"] { self.off(l["id"]) }
+            l["fn"](payload)
+            count += 1
+        }
+        for l in wild {
+            if l["once"] { self.off(l["id"]) }
+            l["fn"](event, payload)
+            count += 1
+        }
+        return count
+    }
+
+    fn listenerCount(event) {
+        return len(self.listeners.get(event, []))
+    }
+
+    fn eventNames() {
+        return self.listeners.keys()
+    }
+
+    # Removes all listeners for one event, or for every event when omitted.
+    fn removeAll(event) {
+        if event == null {
+            self.listeners = {}
+        } else if event in self.listeners {
+            self.listeners.delete(event)
+        }
+    }
+}
+
+# Redux-style store: state only changes through dispatch(action) and a reducer.
+class Store {
+    fn init(reducer, initialState, options) {
+        if options == null { options = {} }
+        self.reducer = reducer
+        self.state = initialState
+        self.events = EventEmitter()
+        self.history = []
+        self.historyLimit = options.get("historyLimit", 50)
+        self.middleware = []
+    }
+
+    fn getState() { return self.state }
+
+    # Middleware: fn(store, action) returning the (possibly changed) action, or null to cancel.
+    fn use(middlewareFn) {
+        self.middleware.push(middlewareFn)
+        return self
+    }
+
+    fn dispatch(action) {
+        for m in self.middleware {
+            action = m(self, action)
+            if action == null { return self.state }
+        }
+        let previous = self.state
+        self.state = self.reducer(previous, action)
+        self.history.push(previous)
+        while len(self.history) > self.historyLimit { self.history.splice(0, 1) }
+        self.events.emit("change", {"state": self.state, "previous": previous, "action": action})
+        return self.state
+    }
+
+    # listener(state, previous, action). Returns an id for unsubscribe().
+    fn subscribe(listener) {
+        return self.events.on("change", fn(e) { listener(e["state"], e["previous"], e["action"]) })
+    }
+
+    fn unsubscribe(id) { return self.events.off(id) }
+
+    # Restores the state before the last dispatch. Returns false if there is none.
+    fn undo() {
+        if len(self.history) == 0 { return false }
+        let previous = self.state
+        self.state = self.history.pop()
+        self.events.emit("change", {"state": self.state, "previous": previous, "action": {"type": "@@undo"}})
+        return true
+    }
+
+    # Runs `listener(value)` only when selector(state) changes (compared as strings).
+    fn watch(selector, listener) {
+        let box = {"last": str(selector(self.state))}
+        return self.subscribe(fn(state, previous, action) {
+            let value = selector(state)
+            if str(value) != box["last"] {
+                box["last"] = str(value)
+                listener(value)
+            }
+        })
+    }
+}
+
+# Finite state machine with named transitions.
+#   transitions: {"state": {"event": "nextState", ...}, ...}
+class StateMachine {
+    fn init(initial, transitions) {
+        self.state = initial
+        self.transitions = transitions
+        self.events = EventEmitter()
+    }
+
+    fn can(event) {
+        return event in self.transitions.get(self.state, {})
+    }
+
+    # Allowed events from the current state.
+    fn available() {
+        return self.transitions.get(self.state, {}).keys()
+    }
+
+    # Performs a transition; raises if `event` is not allowed from the current state.
+    fn send(event) {
+        if not self.can(event) {
+            raise "invalid transition '" + event + "' from state '" + self.state + "'"
+        }
+        let previous = self.state
+        self.state = self.transitions[previous][event]
+        let info = {"from": previous, "to": self.state, "event": event}
+        self.events.emit("transition", info)
+        self.events.emit("leave:" + previous, info)
+        self.events.emit("enter:" + self.state, info)
+        return self.state
+    }
+
+    # Like send(), but returns false instead of raising.
+    fn trySend(event) {
+        if not self.can(event) { return false }
+        self.send(event)
+        return true
+    }
+
+    fn matches(stateName) { return self.state == stateName }
+
+    fn onTransition(handler) { return self.events.on("transition", handler) }
+    fn onEnter(stateName, handler) { return self.events.on("enter:" + stateName, handler) }
+    fn onLeave(stateName, handler) { return self.events.on("leave:" + stateName, handler) }
+    fn off(id) { return self.events.off(id) }
+}

@@ -1,0 +1,15 @@
+date,rep,email,region,amount
+2026-08-03,Ada Lovelace,ada@example.com,north,1200.50
+2026-08-04,Alan Turing,alan@example.com,south,980
+2026-08-05,Grace Hopper,grace@example.com,east,2310.75
+2026-08-07,Ada Lovelace,ada@example.com,north,640
+2026-08-09,Katherine Johnson,katherine@example.com,west,1875.20
+2026-08-11,Alan Turing,alan@example.com,south,1430
+2026-08-12,Grace Hopper,not-an-email,east,500
+2026-08-14,Linus Torvalds,linus@example.com,west,760.40
+2026-08-15,Ada Lovelace,ada@example.com,east,3100
+2026-08-18,Margaret Hamilton,margaret@example.com,north,2045.90
+2026-02-30,Alan Turing,alan@example.com,south,300
+2026-08-21,Katherine Johnson,katherine@example.com,west,1320
+2026-08-22,"Hopper, Grace",grace@example.com,moon,410
+2026-08-25,Grace Hopper,grace@example.com,east,1780.10

@@ -1,0 +1,17 @@
+{
+  "name": "quantum-csv",
+  "version": "1.0.0",
+  "description": "CSV for Quantum: RFC 4180-style parsing (quotes, escaped quotes, embedded newlines, CRLF, BOM), header records, number detection, stringify with minimal quoting, and file read/write.",
+  "main": "index.sa",
+  "keywords": ["quantum", "sa", "csv", "tsv", "parse", "spreadsheet", "data"],
+  "license": "MIT",
+  "files": ["index.sa", "README.md"],
+  "scripts": {
+    "test": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa && qrun build/test.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "entry": "test/csv.test.sa",
+    "out": "build/test.sa"
+  }
+}

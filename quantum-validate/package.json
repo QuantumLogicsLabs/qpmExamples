@@ -1,0 +1,17 @@
+{
+  "name": "quantum-validate",
+  "version": "1.0.0",
+  "description": "Input validation for Quantum: email, URL, IPv4/IPv6, phone, credit card (Luhn), UUID, dates, password strength and declarative schema checks with field-level errors.",
+  "main": "index.sa",
+  "keywords": ["quantum", "sa", "validation", "email", "url", "schema", "password", "forms"],
+  "license": "MIT",
+  "files": ["index.sa", "README.md"],
+  "scripts": {
+    "test": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa && qrun build/test.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "entry": "test/validate.test.sa",
+    "out": "build/test.sa"
+  }
+}

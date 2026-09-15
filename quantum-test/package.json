@@ -1,0 +1,9 @@
+{
+  "name": "quantum-test",
+  "version": "1.0.0",
+  "description": "Unit-testing framework for Quantum: describe/it/expect with deep equality, negation, toThrow, failure summaries and a non-zero exit code on failure.",
+  "main": "index.sa",
+  "keywords": ["quantum", "sa", "test", "testing", "unit", "assert", "expect"],
+  "license": "MIT",
+  "files": ["index.sa", "README.md"]
+}

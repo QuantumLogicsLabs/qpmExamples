@@ -1,0 +1,44 @@
+# qpm-test-sa — a small "sales report" CLI built from the .sa qpm packages.
+#
+# Build & run:  qpm run start      (bundles src/main.sa -> build/main.sa, then runs it)
+
+# @use quantum-csv
+# @use quantum-collections
+# @use quantum-math
+# @use quantum-strings
+# @use quantum-datetime
+# @use quantum-validate
+# @use quantum-term
+# @use quantum-loops
+# @use quantum-events
+
+# @use ./report.sa
+
+let log = Logger("sales", "info")
+let bus = EventEmitter()
+bus.on("invalid", fn(row) { log.warn("skipped row " + str(row["line"]) + ": " + row["reason"]) })
+
+let records = CSV.readFile("data/sales.csv")
+log.info("loaded " + Strings.pluralize(len(records), "row"))
+
+let schema = {
+    "date": {"type": "date", "required": true},
+    "rep": {"type": "string", "required": true, "min": 2},
+    "email": {"type": "email", "required": true},
+    "region": {"oneOf": ["north", "south", "east", "west"]},
+    "amount": {"type": "number", "min": 0}
+}
+
+let valid = []
+Loop.each(records, fn(r, i) {
+    let result = Validate.check(r, schema)
+    if result["valid"] {
+        valid.push(r)
+    } else {
+        bus.emit("invalid", {"line": i + 2, "reason": result["errors"][0]["message"]})
+    }
+})
+
+print("")
+print(Report.render(valid))
+log.success("report generated at " + DateTime.format(DateTime.now(), "YYYY-MM-DD HH:mm [UTC]"))

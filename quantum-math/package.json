@@ -1,0 +1,17 @@
+{
+  "name": "quantum-math",
+  "version": "1.0.0",
+  "description": "Math toolkit for Quantum: statistics, primes, gcd/lcm, bases and roman numerals, combinatorics, matrices (determinant, inverse), geometry and finance.",
+  "main": "index.sa",
+  "keywords": ["quantum", "sa", "math", "statistics", "primes", "matrix", "combinatorics"],
+  "license": "MIT",
+  "files": ["index.sa", "README.md"],
+  "scripts": {
+    "test": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa && qrun build/test.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "entry": "test/math.test.sa",
+    "out": "build/test.sa"
+  }
+}

@@ -1,0 +1,49 @@
+# Report rendering, kept in its own file to show relative `# @use ./file.sa`.
+
+class __SalesReport {
+    fn money(n) {
+        return "$" + Strings.formatNumber(n, 2)
+    }
+
+    fn render(rows) {
+        let amounts = CSV.column(rows, "amount")
+        let byRegion = Collections.groupBy(rows, fn(r) { return r["region"] })
+
+        let regionRows = []
+        for region in sorted(byRegion.keys()) {
+            let sales = CSV.column(byRegion[region], "amount")
+            regionRows.push([Strings.titleCase(region), len(sales), Report.money(QMath.sum(sales)), Report.money(QMath.mean(sales))])
+        }
+
+        let reps = Collections.groupBy(rows, fn(r) { return r["rep"] })
+        let totals = reps.keys().map(fn(name) {
+            return {"rep": name, "total": Collections.sumBy(reps[name], fn(r) { return r["amount"] })}
+        })
+        let top = Collections.sortBy(totals, fn(t) { return t["total"] }, true)
+        let best = top[0]
+
+        let dates = rows.map(fn(r) { return DateTime.parse(r["date"]) })
+        let first = QMath.minOf(dates)
+        let last = QMath.maxOf(dates)
+
+        let lines = []
+        lines.push(Term.box(
+            "Sales " + DateTime.format(first, "MMM D") + " – " + DateTime.format(last, "MMM D, YYYY") + "\n" +
+            "Total  " + Report.money(QMath.sum(amounts)) + "\n" +
+            "Median " + Report.money(QMath.median(amounts)) + "   σ " + Report.money(QMath.stdDev(amounts)),
+            {"title": "summary"}))
+        lines.push("")
+        lines.push(Term.table(regionRows, {"headers": ["Region", "Deals", "Revenue", "Avg deal"], "align": ["left", "right", "right", "right"]}))
+        lines.push("")
+        lines.push(Term.bold("Top reps"))
+        let podium = top.slice(0, 3)
+        let labels = Loop.mapIndexed(podium, fn(t, i) { return str(i + 1) + ". " + t["rep"] })
+        let labelWidth = QMath.maxOf(labels.map(fn(l) { return len(l) })) + 2
+        for i in range(len(podium)) {
+            lines.push(Strings.padRight(labels[i], labelWidth) + Term.progressBar(podium[i]["total"], best["total"], 20) + "  " + Report.money(podium[i]["total"]))
+        }
+        return lines.join("\n")
+    }
+}
+
+Report = __SalesReport()

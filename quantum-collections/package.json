@@ -1,0 +1,17 @@
+{
+  "name": "quantum-collections",
+  "version": "1.0.0",
+  "description": "Data structures and collection utilities for Quantum: Stack, Queue, Deque, UniqueSet, PriorityQueue, LRUCache, Counter, stable sortBy, groupBy, deep get/set/merge/clone.",
+  "main": "index.sa",
+  "keywords": ["quantum", "sa", "collections", "stack", "queue", "heap", "cache", "groupby"],
+  "license": "MIT",
+  "files": ["index.sa", "README.md"],
+  "scripts": {
+    "test": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa && qrun build/test.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "entry": "test/collections.test.sa",
+    "out": "build/test.sa"
+  }
+}

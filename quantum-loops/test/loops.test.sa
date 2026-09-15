@@ -1,0 +1,135 @@
+# @use quantum-test
+# @use ../index.sa
+
+describe("Loop counting", fn() {
+    it("runs times and collects results", fn() {
+        expect(Loop.times(4, fn(i) { return i * i })).toEqual([0, 1, 4, 9])
+        expect(Loop.times(0, fn(i) { return i })).toEqual([])
+    })
+    it("builds ranges", fn() {
+        expect(Loop.range(5)).toEqual([0, 1, 2, 3, 4])
+        expect(Loop.range(2, 6)).toEqual([2, 3, 4, 5])
+        expect(Loop.range(0, 10, 3)).toEqual([0, 3, 6, 9])
+        expect(Loop.range(10, 0, -5)).toEqual([10, 5])
+        expect(Loop.range(3, 1)).toEqual([3, 2])
+        expect(Loop.range(0, 1, 0.25)).toEqual([0, 0.25, 0.5, 0.75])
+        expect(Loop.rangeInclusive(1, 5)).toEqual([1, 2, 3, 4, 5])
+        expect(Loop.rangeInclusive(0, 1, 0.5)).toEqual([0, 0.5, 1])
+        expect(Loop.rangeInclusive(0, 5, 2)).toEqual([0, 2, 4])
+        expect(Loop.linspace(0, 1, 5)).toEqual([0, 0.25, 0.5, 0.75, 1])
+        expect(fn() { Loop.range(0, 5, 0) }).toThrow()
+    })
+    it("counts down and walks grids", fn() {
+        let seen = []
+        Loop.countdown(3, 1, fn(n) { seen.push(n) })
+        expect(seen).toEqual([3, 2, 1])
+
+        let cells = []
+        let visited = Loop.grid(2, 3, fn(r, c) { cells.push(str(r) + str(c)) })
+        expect(cells).toEqual(["00", "01", "02", "10", "11", "12"])
+        expect(visited).toBe(6)
+
+        let stopAt = Loop.grid(3, 3, fn(r, c) {
+            if r == 1 and c == 1 { return Loop.BREAK }
+        })
+        expect(stopAt).toBe(5)
+    })
+})
+
+describe("Loop collections", fn() {
+    it("iterates with index and BREAK", fn() {
+        let log = []
+        let visited = Loop.each(["a", "b", "stop", "c"], fn(item, i) {
+            if item == "stop" { return Loop.BREAK }
+            log.push(str(i) + item)
+        })
+        expect(log).toEqual(["0a", "1b"])
+        expect(visited).toBe(3)
+
+        let rev = []
+        Loop.eachReverse([1, 2, 3], fn(x) { rev.push(x) })
+        expect(rev).toEqual([3, 2, 1])
+    })
+    it("iterates dicts and steps", fn() {
+        let parts = []
+        Loop.eachKey({"a": 1, "b": 2}, fn(k, v) { parts.push(k + "=" + str(v)) })
+        expect(sorted(parts)).toEqual(["a=1", "b=2"])
+
+        let stepped = []
+        Loop.eachStep([0, 1, 2, 3, 4, 5, 6], 3, fn(x) { stepped.push(x) })
+        expect(stepped).toEqual([0, 3, 6])
+    })
+    it("maps and filters with index", fn() {
+        expect(Loop.mapIndexed(["x", "y"], fn(v, i) { return v + str(i) })).toEqual(["x0", "y1"])
+        expect(Loop.filterIndexed([5, 6, 7, 8], fn(v, i) { return i % 2 == 0 })).toEqual([5, 7])
+    })
+})
+
+describe("Loop conditions", fn() {
+    it("loops while a condition holds", fn() {
+        let total = 0
+        let count = Loop.loopWhile(fn(i) { return total < 10 }, fn(i) { total += 3 })
+        expect(total).toBe(12)
+        expect(count).toBe(4)
+        expect(fn() { Loop.loopWhile(fn(i) { return true }, fn(i) {}, 50) }).toThrow()
+    })
+    it("repeats until done", fn() {
+        let n = 1
+        let iterations = Loop.repeatUntil(fn(i) {
+            n *= 2
+            return n >= 100
+        })
+        expect(n).toBe(128)
+        expect(iterations).toBe(7)
+    })
+    it("takes, drops and finds", fn() {
+        let nums = [1, 3, 5, 6, 7, 8]
+        expect(Loop.takeWhile(nums, fn(x) { return x % 2 == 1 })).toEqual([1, 3, 5])
+        expect(Loop.dropWhile(nums, fn(x) { return x % 2 == 1 })).toEqual([6, 7, 8])
+        expect(Loop.findIndex(nums, fn(x) { return x > 5 })).toBe(3)
+        expect(Loop.findLastIndex(nums, fn(x) { return x % 2 == 1 })).toBe(4)
+        expect(Loop.findIndex(nums, fn(x) { return x > 99 })).toBe(-1)
+    })
+    it("retries failing work", fn() {
+        let result = Loop.retry(fn(attempt) {
+            if attempt < 3 { raise "flaky" }
+            return "done on " + str(attempt)
+        }, 5)
+        expect(result["ok"]).toBeTruthy()
+        expect(result["value"]).toBe("done on 3")
+        expect(result["attempts"]).toBe(3)
+
+        let failed = Loop.retry(fn(attempt) { raise "always" }, 2)
+        expect(failed["ok"]).toBeFalsy()
+        expect(failed["error"]).toBe("always")
+    })
+})
+
+describe("Loop shaping", fn() {
+    it("enumerates, zips and multiplies", fn() {
+        expect(Loop.enumerate(["a", "b"])).toEqual([[0, "a"], [1, "b"]])
+        expect(Loop.zip([1, 2, 3], ["a", "b"])).toEqual([[1, "a"], [2, "b"]])
+        expect(Loop.unzip([[1, "a"], [2, "b"]])).toEqual([[1, 2], ["a", "b"]])
+        expect(Loop.product([1, 2], ["x", "y"])).toEqual([[1, "x"], [1, "y"], [2, "x"], [2, "y"]])
+    })
+    it("slices into windows and chunks", fn() {
+        expect(Loop.windows([1, 2, 3, 4], 3)).toEqual([[1, 2, 3], [2, 3, 4]])
+        expect(Loop.pairs([1, 2, 3])).toEqual([[1, 2], [2, 3]])
+        expect(Loop.chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]])
+    })
+    it("flattens, cycles, interleaves and accumulates", fn() {
+        expect(Loop.flatten([1, [2, [3, [4]]]])).toEqual([1, 2, 3, 4])
+        expect(Loop.flatten([1, [2, [3]]], 1)).toEqual([1, 2, [3]])
+        expect(Loop.cycle(["r", "g", "b"], 5)).toEqual(["r", "g", "b", "r", "g"])
+        expect(Loop.interleave([1, 3], [2, 4, 6])).toEqual([1, 2, 3, 4, 6])
+        expect(Loop.accumulate([1, 2, 3, 4], fn(a, b) { return a + b })).toEqual([1, 3, 6, 10])
+        expect(Loop.accumulate([1, 2], fn(a, b) { return a * b }, 10)).toEqual([10, 20])
+    })
+    it("benchmarks a function", fn() {
+        let stats = Loop.benchmark(fn(i) { return i * 2 }, 100)
+        expect(stats["iterations"]).toBe(100)
+        expect(stats["total"] >= 0).toBeTruthy()
+    })
+})
+
+Test.report()

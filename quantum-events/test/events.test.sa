@@ -1,0 +1,169 @@
+# @use quantum-test
+# @use ../index.sa
+
+describe("EventEmitter", fn() {
+    it("calls listeners with the payload", fn() {
+        let bus = EventEmitter()
+        let got = []
+        bus.on("msg", fn(p) { got.push("a:" + p) })
+        bus.on("msg", fn(p) { got.push("b:" + p) })
+        expect(bus.emit("msg", "hi")).toBe(2)
+        expect(got).toEqual(["a:hi", "b:hi"])
+        expect(bus.emit("nothing", 1)).toBe(0)
+    })
+    it("removes listeners by id", fn() {
+        let bus = EventEmitter()
+        let hits = {"n": 0}
+        let id = bus.on("tick", fn(p) { hits["n"] += 1 })
+        bus.emit("tick")
+        expect(bus.off(id)).toBeTruthy()
+        expect(bus.off(id)).toBeFalsy()
+        bus.emit("tick")
+        expect(hits["n"]).toBe(1)
+        expect(bus.listenerCount("tick")).toBe(0)
+    })
+    it("runs once listeners a single time", fn() {
+        let bus = EventEmitter()
+        let hits = {"n": 0}
+        bus.once("ready", fn(p) { hits["n"] += 1 })
+        bus.emit("ready")
+        bus.emit("ready")
+        expect(hits["n"]).toBe(1)
+    })
+    it("supports wildcard listeners and bookkeeping", fn() {
+        let bus = EventEmitter()
+        let seen = []
+        bus.on("*", fn(event, payload) { seen.push(event + "=" + str(payload)) })
+        bus.on("a", fn(p) {})
+        bus.emit("a", 1)
+        bus.emit("b", 2)
+        expect(seen).toEqual(["a=1", "b=2"])
+        expect(sorted(bus.eventNames())).toEqual(["*", "a"])
+        bus.removeAll("a")
+        expect(bus.listenerCount("a")).toBe(0)
+        bus.removeAll()
+        expect(bus.eventNames()).toEqual([])
+    })
+    it("tolerates listeners that unsubscribe during emit", fn() {
+        let bus = EventEmitter()
+        let log = []
+        let ids = {}
+        ids["first"] = bus.on("go", fn(p) {
+            log.push("first")
+            bus.off(ids["first"])
+        })
+        bus.on("go", fn(p) { log.push("second") })
+        bus.emit("go")
+        bus.emit("go")
+        expect(log).toEqual(["first", "second", "second"])
+    })
+})
+
+fn counterReducer(state, action) {
+    let kind = action["type"]
+    if kind == "add" { return {"count": state["count"] + action["by"]} }
+    if kind == "reset" { return {"count": 0} }
+    return state
+}
+
+describe("Store", fn() {
+    it("updates state through the reducer and notifies subscribers", fn() {
+        let store = Store(counterReducer, {"count": 0})
+        let log = []
+        let id = store.subscribe(fn(state, previous, action) {
+            log.push(action["type"] + ":" + str(previous["count"]) + "->" + str(state["count"]))
+        })
+        store.dispatch({"type": "add", "by": 2})
+        store.dispatch({"type": "add", "by": 3})
+        expect(store.getState()).toEqual({"count": 5})
+        expect(log).toEqual(["add:0->2", "add:2->5"])
+        store.unsubscribe(id)
+        store.dispatch({"type": "reset"})
+        expect(len(log)).toBe(2)
+    })
+    it("undoes dispatches and caps history", fn() {
+        let store = Store(counterReducer, {"count": 0}, {"historyLimit": 2})
+        for i in range(4) { store.dispatch({"type": "add", "by": 1}) }
+        expect(store.getState()["count"]).toBe(4)
+        expect(store.undo()).toBeTruthy()
+        expect(store.undo()).toBeTruthy()
+        expect(store.getState()["count"]).toBe(2)
+        expect(store.undo()).toBeFalsy()
+    })
+    it("runs middleware that can change or cancel actions", fn() {
+        let store = Store(counterReducer, {"count": 0})
+        let seen = []
+        store.use(fn(s, action) {
+            seen.push(action["type"])
+            return action
+        })
+        store.use(fn(s, action) {
+            if action["type"] == "add" and action["by"] > 100 { return null }
+            return action
+        })
+        store.dispatch({"type": "add", "by": 500})
+        store.dispatch({"type": "add", "by": 1})
+        expect(store.getState()["count"]).toBe(1)
+        expect(seen).toEqual(["add", "add"])
+    })
+    it("watches a selected value", fn() {
+        let store = Store(fn(state, action) {
+            if action["type"] == "rename" { return {"name": action["name"], "clicks": state["clicks"]} }
+            if action["type"] == "click" { return {"name": state["name"], "clicks": state["clicks"] + 1} }
+            return state
+        }, {"name": "ada", "clicks": 0})
+        let names = []
+        store.watch(fn(s) { return s["name"] }, fn(name) { names.push(name) })
+        store.dispatch({"type": "click"})
+        store.dispatch({"type": "rename", "name": "grace"})
+        store.dispatch({"type": "click"})
+        expect(names).toEqual(["grace"])
+    })
+})
+
+describe("StateMachine", fn() {
+    let transitions = {
+        "idle": {"fetch": "loading"},
+        "loading": {"resolve": "done", "reject": "error"},
+        "error": {"retry": "loading"},
+        "done": {}
+    }
+    it("moves between states", fn() {
+        let m = StateMachine("idle", transitions)
+        expect(m.can("fetch")).toBeTruthy()
+        expect(m.can("resolve")).toBeFalsy()
+        expect(m.send("fetch")).toBe("loading")
+        expect(sorted(m.available())).toEqual(["reject", "resolve"])
+        m.send("reject")
+        m.send("retry")
+        m.send("resolve")
+        expect(m.matches("done")).toBeTruthy()
+        expect(m.available()).toEqual([])
+    })
+    it("rejects invalid transitions", fn() {
+        let m = StateMachine("idle", transitions)
+        expect(fn() { m.send("resolve") }).toThrow()
+        expect(m.trySend("resolve")).toBeFalsy()
+        expect(m.state).toBe("idle")
+    })
+    it("fires transition, enter and leave hooks", fn() {
+        let m = StateMachine("idle", transitions)
+        let log = []
+        m.onTransition(fn(t) { log.push(t["from"] + ">" + t["to"]) })
+        m.onEnter("loading", fn(t) { log.push("enter loading via " + t["event"]) })
+        let leaveId = m.onLeave("loading", fn(t) { log.push("leave loading") })
+        m.send("fetch")
+        m.send("reject")
+        m.off(leaveId)
+        m.send("retry")
+        m.send("resolve")
+        expect(log).toEqual([
+            "idle>loading", "enter loading via fetch",
+            "loading>error", "leave loading",
+            "error>loading", "enter loading via retry",
+            "loading>done"
+        ])
+    })
+})
+
+Test.report()

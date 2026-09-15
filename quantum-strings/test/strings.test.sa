@@ -1,0 +1,99 @@
+# @use quantum-test
+# @use ../index.sa
+
+describe("Strings case", fn() {
+    it("splits words", fn() {
+        expect(Strings.words("parseHTTPResponse_code")).toEqual(["parse", "HTTP", "Response", "code"])
+        expect(Strings.words("  hello, world! ")).toEqual(["hello", "world"])
+        expect(Strings.words("version2Beta")).toEqual(["version", "2", "Beta"])
+    })
+    it("converts case", fn() {
+        expect(Strings.camelCase("Hello big world")).toBe("helloBigWorld")
+        expect(Strings.pascalCase("user_account-id")).toBe("UserAccountId")
+        expect(Strings.snakeCase("userAccountID")).toBe("user_account_id")
+        expect(Strings.kebabCase("UserAccount ID")).toBe("user-account-id")
+        expect(Strings.constantCase("maxRetryCount")).toBe("MAX_RETRY_COUNT")
+        expect(Strings.titleCase("the QUICK brown fox")).toBe("The Quick Brown Fox")
+        expect(Strings.capitalize("quantum")).toBe("Quantum")
+    })
+    it("slugifies and makes initials", fn() {
+        expect(Strings.slugify("Hello, World! It's Quantum")).toBe("hello-world-its-quantum")
+        expect(Strings.initials("ada  lovelace")).toBe("AL")
+    })
+})
+
+describe("Strings shaping", fn() {
+    it("truncates", fn() {
+        expect(Strings.truncate("The quick brown fox", 12)).toBe("The quick...")
+        expect(Strings.truncate("short", 10)).toBe("short")
+        expect(Strings.truncate("abcdefgh", 5, "~")).toBe("abcd~")
+    })
+    it("pads and centers", fn() {
+        expect(Strings.padLeft(7, 3, "0")).toBe("007")
+        expect(Strings.padRight("ab", 4, ".")).toBe("ab..")
+        expect(Strings.center("hi", 6, "*")).toBe("**hi**")
+        expect(Strings.center("hi", 5)).toBe(" hi  ")
+    })
+    it("wraps and indents", fn() {
+        expect(Strings.wrap("the quick brown fox jumps", 10)).toBe("the quick\nbrown fox\njumps")
+        expect(Strings.indent("a\n\nb", 2)).toBe("  a\n\n  b")
+    })
+    it("reverses and masks", fn() {
+        expect(Strings.reverse("quantum")).toBe("mutnauq")
+        expect(Strings.mask("4111111111111111")).toBe("************1111")
+        expect(Strings.mask("abc", 4)).toBe("abc")
+    })
+})
+
+describe("Strings inspection", fn() {
+    it("checks blank and palindromes", fn() {
+        expect(Strings.isBlank("   ")).toBeTruthy()
+        expect(Strings.isBlank(null)).toBeTruthy()
+        expect(Strings.isBlank(" x ")).toBeFalsy()
+        expect(Strings.isPalindrome("A man, a plan, a canal: Panama")).toBeTruthy()
+        expect(Strings.isPalindrome("quantum")).toBeFalsy()
+    })
+    it("counts and extracts", fn() {
+        expect(Strings.count("banana", "an")).toBe(2)
+        expect(Strings.count("aaaa", "aa")).toBe(2)
+        expect(Strings.count("abc", "z")).toBe(0)
+        expect(Strings.between("<b>bold</b>", "<b>", "</b>")).toBe("bold")
+        expect(Strings.between("none", "[", "]")).toBeNull()
+    })
+    it("compares and measures similarity", fn() {
+        expect(Strings.compare("apple", "banana")).toBe(-1)
+        expect(Strings.compare("b", "a")).toBe(1)
+        expect(Strings.compare("x", "x")).toBe(0)
+        expect(Strings.similarity("kitten", "kitten")).toBe(1)
+        expect(Strings.similarity("kitten", "sitting")).toBeCloseTo(0.5714, 3)
+        expect(Strings.closest("instal", ["init", "install", "publish"])).toBe("install")
+    })
+})
+
+describe("Strings formatting", fn() {
+    it("fills templates", fn() {
+        expect(Strings.template("Hi {{name}}, you have {{ n }} new", {"name": "Ada", "n": 3})).toBe("Hi Ada, you have 3 new")
+        expect(Strings.template("{{missing}}", {})).toBe("{{missing}}")
+    })
+    it("escapes html", fn() {
+        let raw = "<a href=\"x\">Tom & 'Jerry'</a>"
+        let escaped = Strings.escapeHtml(raw)
+        expect(escaped).toBe("&lt;a href=&quot;x&quot;&gt;Tom &amp; &#39;Jerry&#39;&lt;/a&gt;")
+        expect(Strings.unescapeHtml(escaped)).toBe(raw)
+    })
+    it("pluralizes and ordinals", fn() {
+        expect(Strings.pluralize(1, "file")).toBe("1 file")
+        expect(Strings.pluralize(3, "box", "boxes")).toBe("3 boxes")
+        expect([1, 2, 3, 4, 11, 12, 13, 21, 102, 113].map(fn(n) { return Strings.ordinal(n) })).toEqual(["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "102nd", "113th"])
+    })
+    it("formats numbers and bytes", fn() {
+        expect(Strings.formatNumber(1234567.891, 2)).toBe("1,234,567.89")
+        expect(Strings.formatNumber(-1000)).toBe("-1,000")
+        expect(Strings.formatNumber(999)).toBe("999")
+        expect(Strings.formatBytes(512)).toBe("512 B")
+        expect(Strings.formatBytes(1536)).toBe("1.5 KB")
+        expect(Strings.formatBytes(5368709120)).toBe("5.0 GB")
+    })
+})
+
+Test.report()

@@ -1,0 +1,556 @@
+# quantum-collections — data structures & collection utilities for Quantum
+#
+#   s = Stack()            s.push(1)  s.pop()
+#   q = Queue()            q.enqueue("job")  q.dequeue()
+#   pq = PriorityQueue()   pq.push(5)  pq.push(1)  pq.pop()     # 1
+#   cache = LRUCache(100)  cache.set("k", v)  cache.get("k")
+#   Collections.groupBy(users, fn(u) { return u["role"] })
+#   Collections.sortBy(users, fn(u) { return u["age"] })
+#
+# Exposes globals: Stack, Queue, Deque, UniqueSet, PriorityQueue, LRUCache,
+#                  Counter, Collections
+# (Named UniqueSet because the VM already defines a native `Set`.)
+
+# ── Stack (LIFO) ─────────────────────────────────────────────────────────
+
+class Stack {
+    fn init(items) {
+        self.items = items == null ? [] : items.slice(0)
+    }
+    fn push(x) {
+        self.items.push(x)
+        return self
+    }
+    # Returns null when empty instead of raising.
+    fn pop() {
+        if len(self.items) == 0 { return null }
+        return self.items.pop()
+    }
+    fn peek() {
+        if len(self.items) == 0 { return null }
+        return self.items[-1]
+    }
+    fn size() { return len(self.items) }
+    fn isEmpty() { return len(self.items) == 0 }
+    fn clear() { self.items = [] }
+    fn toArray() { return self.items.slice(0) }
+}
+
+# ── Queue (FIFO, amortized O(1) dequeue) ─────────────────────────────────
+
+class Queue {
+    fn init(items) {
+        self.items = items == null ? [] : items.slice(0)
+        self.head = 0
+    }
+    fn enqueue(x) {
+        self.items.push(x)
+        return self
+    }
+    fn dequeue() {
+        if self.head >= len(self.items) { return null }
+        let x = self.items[self.head]
+        self.head += 1
+        # Drop the consumed prefix once it dominates the array.
+        if self.head > 32 and self.head * 2 > len(self.items) {
+            self.items = self.items.slice(self.head)
+            self.head = 0
+        }
+        return x
+    }
+    fn peek() {
+        if self.head >= len(self.items) { return null }
+        return self.items[self.head]
+    }
+    fn size() { return len(self.items) - self.head }
+    fn isEmpty() { return self.size() == 0 }
+    fn clear() {
+        self.items = []
+        self.head = 0
+    }
+    fn toArray() { return self.items.slice(self.head) }
+}
+
+# ── Deque (double-ended queue) ───────────────────────────────────────────
+
+class Deque {
+    fn init(items) {
+        self.items = items == null ? [] : items.slice(0)
+    }
+    fn pushFront(x) {
+        self.items.insert(0, x)
+        return self
+    }
+    fn pushBack(x) {
+        self.items.push(x)
+        return self
+    }
+    fn popFront() {
+        if len(self.items) == 0 { return null }
+        let x = self.items[0]
+        self.items = self.items.slice(1)
+        return x
+    }
+    fn popBack() {
+        if len(self.items) == 0 { return null }
+        return self.items.pop()
+    }
+    fn peekFront() { return len(self.items) == 0 ? null : self.items[0] }
+    fn peekBack() { return len(self.items) == 0 ? null : self.items[-1] }
+    fn size() { return len(self.items) }
+    fn isEmpty() { return len(self.items) == 0 }
+    fn toArray() { return self.items.slice(0) }
+}
+
+# ── UniqueSet ────────────────────────────────────────────────────────────
+
+class UniqueSet {
+    fn init(items) {
+        self.map = {}
+        if items != null {
+            for x in items { self.add(x) }
+        }
+    }
+    # Values of different types never collide: 1 and "1" are distinct.
+    fn keyFor(x) {
+        return type(x) + ":" + str(x)
+    }
+    fn add(x) {
+        self.map[self.keyFor(x)] = x
+        return self
+    }
+    fn has(x) { return self.keyFor(x) in self.map }
+    fn remove(x) {
+        let key = self.keyFor(x)
+        if not (key in self.map) { return false }
+        self.map.delete(key)
+        return true
+    }
+    fn size() { return len(self.map) }
+    fn isEmpty() { return len(self.map) == 0 }
+    fn values() { return self.map.values() }
+    fn union(other) {
+        let out = UniqueSet(self.values())
+        for x in other.values() { out.add(x) }
+        return out
+    }
+    fn intersection(other) {
+        return UniqueSet(self.values().filter(fn(x) { return other.has(x) }))
+    }
+    fn difference(other) {
+        return UniqueSet(self.values().filter(fn(x) { return not other.has(x) }))
+    }
+    fn isSubsetOf(other) {
+        for x in self.values() {
+            if not other.has(x) { return false }
+        }
+        return true
+    }
+}
+
+# ── PriorityQueue (binary heap) ──────────────────────────────────────────
+
+class PriorityQueue {
+    # compare(a, b) < 0 means a comes out first. Default: smallest number first.
+    fn init(compare) {
+        self.heap = []
+        self.compare = compare == null ? fn(a, b) { return a - b } : compare
+    }
+    fn push(x) {
+        self.heap.push(x)
+        let i = len(self.heap) - 1
+        while i > 0 {
+            let parent = floor((i - 1) / 2)
+            if self.compare(self.heap[i], self.heap[parent]) >= 0 { break }
+            self.swap(i, parent)
+            i = parent
+        }
+        return self
+    }
+    fn pop() {
+        let n = len(self.heap)
+        if n == 0 { return null }
+        let top = self.heap[0]
+        let last = self.heap.pop()
+        if n > 1 {
+            self.heap[0] = last
+            self.siftDown(0)
+        }
+        return top
+    }
+    fn peek() { return len(self.heap) == 0 ? null : self.heap[0] }
+    fn size() { return len(self.heap) }
+    fn isEmpty() { return len(self.heap) == 0 }
+    fn swap(i, j) {
+        let t = self.heap[i]
+        self.heap[i] = self.heap[j]
+        self.heap[j] = t
+    }
+    fn siftDown(i) {
+        let n = len(self.heap)
+        while true {
+            let smallest = i
+            let l = 2 * i + 1
+            let r = 2 * i + 2
+            if l < n and self.compare(self.heap[l], self.heap[smallest]) < 0 { smallest = l }
+            if r < n and self.compare(self.heap[r], self.heap[smallest]) < 0 { smallest = r }
+            if smallest == i { return }
+            self.swap(i, smallest)
+            i = smallest
+        }
+    }
+    # Drains a copy in priority order without modifying this queue.
+    fn toSortedArray() {
+        let copy = PriorityQueue(self.compare)
+        copy.heap = self.heap.slice(0)
+        let out = []
+        while not copy.isEmpty() { out.push(copy.pop()) }
+        return out
+    }
+}
+
+# ── LRUCache ─────────────────────────────────────────────────────────────
+
+class LRUCache {
+    fn init(capacity) {
+        self.capacity = capacity == null ? 100 : capacity
+        self.store = {}
+        self.order = []      # least recently used first
+    }
+    fn touch(key) {
+        let idx = self.order.indexOf(key)
+        if idx != -1 { self.order.splice(idx, 1) }
+        self.order.push(key)
+    }
+    fn get(key, fallback) {
+        key = str(key)
+        if not (key in self.store) { return fallback }
+        self.touch(key)
+        return self.store[key]
+    }
+    fn set(key, value) {
+        key = str(key)
+        self.store[key] = value
+        self.touch(key)
+        while len(self.order) > self.capacity {
+            let evicted = self.order[0]
+            self.order.splice(0, 1)
+            self.store.delete(evicted)
+        }
+        return self
+    }
+    fn has(key) { return str(key) in self.store }
+    fn remove(key) {
+        key = str(key)
+        if not (key in self.store) { return false }
+        self.store.delete(key)
+        self.order.splice(self.order.indexOf(key), 1)
+        return true
+    }
+    fn size() { return len(self.order) }
+    # Keys from least to most recently used.
+    fn keys() { return self.order.slice(0) }
+    fn clear() {
+        self.store = {}
+        self.order = []
+    }
+}
+
+# ── Counter ──────────────────────────────────────────────────────────────
+
+class Counter {
+    fn init(items) {
+        self.counts = {}
+        self.firstSeen = []
+        if items != null {
+            for x in items { self.add(x) }
+        }
+    }
+    fn add(item, n) {
+        if n == null { n = 1 }
+        let key = str(item)
+        if not (key in self.counts) {
+            self.counts[key] = 0
+            self.firstSeen.push(key)
+        }
+        self.counts[key] += n
+        return self
+    }
+    fn get(item) { return self.counts.get(str(item), 0) }
+    fn total() {
+        let t = 0
+        for k in self.firstSeen { t += self.counts[k] }
+        return t
+    }
+    # [[item, count], ...] highest count first; ties keep first-seen order.
+    fn mostCommon(n) {
+        let pairs = self.firstSeen.map(fn(k) { return [k, self.counts[k]] })
+        let ordered = Collections.sortWith(pairs, fn(a, b) { return b[1] - a[1] })
+        if n == null { return ordered }
+        return ordered.slice(0, min(n, len(ordered)))
+    }
+}
+
+# ── Collections utilities ────────────────────────────────────────────────
+
+class __QCollections {
+    # Orders numbers numerically and strings lexicographically.
+    fn compareValues(a, b) {
+        if type(a) == "string" and type(b) == "string" { return strcmp(a, b) }
+        if a < b { return -1 }
+        if a > b { return 1 }
+        return 0
+    }
+
+    # Stable merge sort with a comparator (the native sort ignores comparators).
+    fn sortWith(arr, compare) {
+        if len(arr) <= 1 { return arr.slice(0) }
+        let mid = floor(len(arr) / 2)
+        let left = self.sortWith(arr.slice(0, mid), compare)
+        let right = self.sortWith(arr.slice(mid), compare)
+        let out = []
+        let i = 0
+        let j = 0
+        while i < len(left) and j < len(right) {
+            if compare(right[j], left[i]) < 0 {
+                out.push(right[j])
+                j += 1
+            } else {
+                out.push(left[i])
+                i += 1
+            }
+        }
+        while i < len(left) {
+            out.push(left[i])
+            i += 1
+        }
+        while j < len(right) {
+            out.push(right[j])
+            j += 1
+        }
+        return out
+    }
+
+    # Stable sort by a key; pass descending = true to reverse.
+    fn sortBy(arr, keyFn, descending) {
+        let dir = descending ? -1 : 1
+        return self.sortWith(arr, fn(a, b) { return dir * Collections.compareValues(keyFn(a), keyFn(b)) })
+    }
+
+    fn groupBy(arr, keyFn) {
+        let out = {}
+        for x in arr {
+            let key = str(keyFn(x))
+            if not (key in out) { out[key] = [] }
+            out[key].push(x)
+        }
+        return out
+    }
+
+    fn countBy(arr, keyFn) {
+        let out = {}
+        for x in arr {
+            let key = str(keyFn == null ? x : keyFn(x))
+            out[key] = out.get(key, 0) + 1
+        }
+        return out
+    }
+
+    fn keyBy(arr, keyFn) {
+        let out = {}
+        for x in arr { out[str(keyFn(x))] = x }
+        return out
+    }
+
+    # [matching, notMatching]
+    fn partition(arr, pred) {
+        let yes = []
+        let no = []
+        for x in arr {
+            if pred(x) {
+                yes.push(x)
+            } else {
+                no.push(x)
+            }
+        }
+        return [yes, no]
+    }
+
+    fn unique(arr) {
+        return self.uniqueBy(arr, fn(x) { return x })
+    }
+
+    # Keeps the first item for each key.
+    fn uniqueBy(arr, keyFn) {
+        let seen = {}
+        let out = []
+        for x in arr {
+            let k = keyFn(x)
+            let key = type(k) + ":" + str(k)
+            if not (key in seen) {
+                seen[key] = true
+                out.push(x)
+            }
+        }
+        return out
+    }
+
+    fn sumBy(arr, keyFn) {
+        let total = 0
+        for x in arr { total += keyFn(x) }
+        return total
+    }
+
+    fn minBy(arr, keyFn) {
+        if len(arr) == 0 { return null }
+        let best = arr[0]
+        for x in arr {
+            if self.compareValues(keyFn(x), keyFn(best)) < 0 { best = x }
+        }
+        return best
+    }
+
+    fn maxBy(arr, keyFn) {
+        if len(arr) == 0 { return null }
+        let best = arr[0]
+        for x in arr {
+            if self.compareValues(keyFn(x), keyFn(best)) > 0 { best = x }
+        }
+        return best
+    }
+
+    # Values of `key` from an array of dicts.
+    fn pluck(arr, key) {
+        return arr.map(fn(d) { return d.get(key) })
+    }
+
+    # Removes null and false.
+    fn compact(arr) {
+        return arr.filter(fn(x) { return x != null and x != false })
+    }
+
+    fn intersect(a, b) {
+        let other = UniqueSet(b)
+        return self.unique(a.filter(fn(x) { return other.has(x) }))
+    }
+
+    fn difference(a, b) {
+        let other = UniqueSet(b)
+        return a.filter(fn(x) { return not other.has(x) })
+    }
+
+    fn union(a, b) {
+        return self.unique(a + b)
+    }
+
+    # Index of target in an ascending array, or -1.
+    fn binarySearch(sortedArr, target) {
+        let lo = 0
+        let hi = len(sortedArr) - 1
+        while lo <= hi {
+            let mid = floor((lo + hi) / 2)
+            let c = self.compareValues(sortedArr[mid], target)
+            if c == 0 { return mid }
+            if c < 0 {
+                lo = mid + 1
+            } else {
+                hi = mid - 1
+            }
+        }
+        return -1
+    }
+
+    # ── dicts ────────────────────────────────────────────────────────────
+
+    fn pick(d, keys) {
+        let out = {}
+        for k in keys {
+            if k in d { out[k] = d[k] }
+        }
+        return out
+    }
+
+    fn omit(d, keys) {
+        let drop = UniqueSet(keys)
+        let out = {}
+        for k in d.keys() {
+            if not drop.has(k) { out[k] = d[k] }
+        }
+        return out
+    }
+
+    fn invert(d) {
+        let out = {}
+        for k in d.keys() { out[str(d[k])] = k }
+        return out
+    }
+
+    fn fromPairs(pairs) {
+        let out = {}
+        for p in pairs { out[p[0]] = p[1] }
+        return out
+    }
+
+    fn zipObject(keys, values) {
+        let out = {}
+        for i in range(len(keys)) { out[keys[i]] = i < len(values) ? values[i] : null }
+        return out
+    }
+
+    # Nested lookup by dotted path: getPath(cfg, "db.primary.port", 5432)
+    # Numeric segments index into arrays: "users.0.name".
+    fn getPath(value, path, fallback) {
+        let cur = value
+        for part in path.split(".") {
+            if type(cur) == "dict" {
+                if not (part in cur) { return fallback }
+                cur = cur[part]
+            } else if type(cur) == "array" and part.isdigit() {
+                let idx = num(part)
+                if idx >= len(cur) { return fallback }
+                cur = cur[idx]
+            } else {
+                return fallback
+            }
+        }
+        return cur
+    }
+
+    # Sets a nested value, creating intermediate dicts as needed.
+    fn setPath(d, path, value) {
+        let parts = path.split(".")
+        let cur = d
+        for i in range(len(parts) - 1) {
+            if type(cur.get(parts[i])) != "dict" { cur[parts[i]] = {} }
+            cur = cur[parts[i]]
+        }
+        cur[parts[-1]] = value
+        return d
+    }
+
+    fn deepClone(value) {
+        let kind = type(value)
+        if kind == "array" { return value.map(fn(x) { return Collections.deepClone(x) }) }
+        if kind == "dict" {
+            let out = {}
+            for k in value.keys() { out[k] = self.deepClone(value[k]) }
+            return out
+        }
+        return value
+    }
+
+    # Recursively merges b into a copy of a; b wins on conflicts.
+    fn deepMerge(a, b) {
+        let out = self.deepClone(a)
+        for k in b.keys() {
+            if type(out.get(k)) == "dict" and type(b[k]) == "dict" {
+                out[k] = self.deepMerge(out[k], b[k])
+            } else {
+                out[k] = self.deepClone(b[k])
+            }
+        }
+        return out
+    }
+}
+
+Collections = __QCollections()

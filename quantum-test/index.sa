@@ -1,0 +1,239 @@
+# quantum-test — a tiny unit-testing framework for Quantum (.sa)
+#
+#   describe("math", fn() {
+#       it("adds", fn() {
+#           expect(1 + 1).toBe(2)
+#           expectNot([1, 2]).toContain(3)
+#       })
+#   })
+#   Test.report()          # prints a summary; raises (exit code 1) on failure
+#
+# Exposes globals: Test, describe, it, expect, expectNot
+#
+# Note for package authors: a bare `x = 1` inside a Quantum function assigns a
+# GLOBAL. Every local in this file is declared with `let` so the framework never
+# clobbers variables in the code under test.
+
+class __QTestExpectation {
+    fn init(actual, negated) {
+        self.actual = actual
+        self.negated = negated
+    }
+
+    # Every matcher funnels through here so expectNot() works uniformly.
+    # Failures are recorded rather than raised: unwinding a frame whose locals
+    # are captured by closures corrupts later closures in the current VM.
+    fn check(passed, message) {
+        if self.negated {
+            passed = not passed
+            message = "NOT " + message
+        }
+        if not passed { Test.recordFailure(message) }
+        return passed
+    }
+
+    fn toBe(expected) {
+        return self.check(Test.equal(self.actual, expected),
+            "expected " + Test.show(self.actual) + " to be " + Test.show(expected))
+    }
+
+    fn toEqual(expected) {
+        return self.toBe(expected)
+    }
+
+    fn toBeTruthy() {
+        return self.check(self.actual ? true : false,
+            "expected " + Test.show(self.actual) + " to be truthy")
+    }
+
+    fn toBeFalsy() {
+        return self.check(self.actual ? false : true,
+            "expected " + Test.show(self.actual) + " to be falsy")
+    }
+
+    fn toBeNull() {
+        return self.check(self.actual == null,
+            "expected " + Test.show(self.actual) + " to be null")
+    }
+
+    fn toBeGreaterThan(n) {
+        return self.check(self.actual > n,
+            "expected " + Test.show(self.actual) + " to be > " + Test.show(n))
+    }
+
+    fn toBeLessThan(n) {
+        return self.check(self.actual < n,
+            "expected " + Test.show(self.actual) + " to be < " + Test.show(n))
+    }
+
+    fn toBeCloseTo(n, digits) {
+        if digits == null { digits = 6 }
+        return self.check(abs(self.actual - n) < pow(10, -digits) / 2,
+            "expected " + Test.show(self.actual) + " to be close to " + Test.show(n))
+    }
+
+    fn toContain(item) {
+        let found = false
+        let kind = type(self.actual)
+        if kind == "string" {
+            found = self.actual.contains(item)
+        } else if kind == "array" {
+            for x in self.actual {
+                if Test.equal(x, item) { found = true }
+            }
+        } else if kind == "dict" {
+            found = item in self.actual
+        }
+        return self.check(found,
+            "expected " + Test.show(self.actual) + " to contain " + Test.show(item))
+    }
+
+    fn toHaveLength(n) {
+        return self.check(len(self.actual) == n,
+            "expected length " + str(len(self.actual)) + " to be " + str(n))
+    }
+
+    fn toBeType(name) {
+        return self.check(type(self.actual) == name,
+            "expected type " + type(self.actual) + " to be " + name)
+    }
+
+    # `actual` must be a zero-argument function.
+    fn toThrow() {
+        let threw = false
+        try {
+            self.actual()
+        } catch (e) {
+            threw = true
+        }
+        return self.check(threw, "expected function to throw")
+    }
+}
+
+class __QTestRunner {
+    fn init() {
+        self.passed = 0
+        self.failed = 0
+        self.failures = []
+        self.prefix = []
+        self.color = true
+        self.current = []
+    }
+
+    fn recordFailure(message) {
+        self.current.push(message)
+    }
+
+    fn paint(code, text) {
+        if not self.color { return text }
+        return "[" + code + "m" + text + "[0m"
+    }
+
+    # Structural equality: arrays and dicts compare element by element.
+    fn equal(a, b) {
+        let ta = type(a)
+        if ta != type(b) { return false }
+        if ta == "array" {
+            if len(a) != len(b) { return false }
+            for i in range(len(a)) {
+                if not self.equal(a[i], b[i]) { return false }
+            }
+            return true
+        }
+        if ta == "dict" {
+            if len(a) != len(b) { return false }
+            for k in a.keys() {
+                if not (k in b) { return false }
+                if not self.equal(a[k], b[k]) { return false }
+            }
+            return true
+        }
+        return a == b
+    }
+
+    fn show(v) {
+        let kind = type(v)
+        if kind == "string" { return "\"" + v + "\"" }
+        if kind == "array" {
+            let parts = []
+            for x in v { parts.push(self.show(x)) }
+            return "[" + parts.join(", ") + "]"
+        }
+        if kind == "dict" {
+            let parts = []
+            for k in v.keys() { parts.push(self.show(k) + ": " + self.show(v[k])) }
+            return "{" + parts.join(", ") + "}"
+        }
+        return str(v)
+    }
+
+    fn indent() {
+        return "  ".repeat(len(self.prefix))
+    }
+
+    fn describe(name, body) {
+        print(self.indent() + self.paint("1", name))
+        self.prefix.push(name)
+        body()
+        self.prefix.pop()
+    }
+
+    fn it(name, body) {
+        self.current = []
+        # (no `let` inside try: the VM misplaces locals declared there after a catch)
+        try {
+            body()
+        } catch (e) {
+            self.current.push("error: " + str(e))
+        }
+        if len(self.current) == 0 {
+            self.passed += 1
+            print(self.indent() + self.paint("32", "✓ ") + name)
+            return
+        }
+        self.failed += 1
+        let full = self.prefix.join(" > ")
+        if full != "" { full += " > " }
+        self.failures.push(full + name + ": " + self.current[0])
+        print(self.indent() + self.paint("31", "✗ " + name))
+        for message in self.current {
+            print(self.indent() + "    " + self.paint("90", message))
+        }
+    }
+
+    fn expect(actual) {
+        return __QTestExpectation(actual, false)
+    }
+
+    fn expectNot(actual) {
+        return __QTestExpectation(actual, true)
+    }
+
+    # Prints the summary and returns true when every test passed. On failure it
+    # raises (Quantum has no exit(); an uncaught raise exits with code 1) unless
+    # raiseOnFail is false.
+    fn report(raiseOnFail) {
+        let total = self.passed + self.failed
+        print("")
+        if self.failed > 0 {
+            print(self.paint("31;1", "Failures:"))
+            for f in self.failures { print("  - " + f) }
+            print("")
+        }
+        let summary = str(self.passed) + " passed, " + str(self.failed) + " failed, " + str(total) + " total"
+        if self.failed == 0 {
+            print(self.paint("32;1", "PASS ") + summary)
+            return true
+        }
+        print(self.paint("31;1", "FAIL ") + summary)
+        if raiseOnFail != false { raise str(self.failed) + " test(s) failed" }
+        return false
+    }
+}
+
+Test = __QTestRunner()
+
+fn describe(name, body) { Test.describe(name, body) }
+fn it(name, body) { Test.it(name, body) }
+fn expect(actual) { return Test.expect(actual) }
+fn expectNot(actual) { return Test.expectNot(actual) }

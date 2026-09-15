@@ -1,0 +1,23 @@
+{
+  "name": "quantum-bundle",
+  "version": "1.0.0",
+  "description": "Resolves `# @use` directives and inlines qpm packages into one runnable .sa file, so Quantum projects can use packages today.",
+  "main": "lib/bundler.sa",
+  "bin": {
+    "quantum-bundle": "bin/bundle.sa"
+  },
+  "keywords": ["quantum", "sa", "bundler", "modules", "build"],
+  "license": "MIT",
+  "files": ["bin/", "lib/", "src/", "README.md"],
+  "scripts": {
+    "build": "qrun bin/bundle.sa",
+    "test": "(if not exist build mkdir build) && qrun bin/bundle.sa && qrun build/bundler.test.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "bundles": [
+      { "entry": "src/cli.sa", "out": "bin/bundle.sa" },
+      { "entry": "test/bundler.test.sa", "out": "build/bundler.test.sa" }
+    ]
+  }
+}

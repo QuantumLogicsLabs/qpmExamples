@@ -1,0 +1,73 @@
+# quantum-bundle — command-line entry point
+#
+# Run from a project directory (qrun does not pass script arguments, so all
+# configuration comes from the "quantum" field of ./package.json):
+#
+#   "quantum": {
+#     "paths":   [".."],                          optional extra package dirs
+#     "bundles": [
+#       { "entry": "src/main.sa", "out": "build/main.sa" }
+#     ]
+#   }
+#
+# A single bundle may also be written as "entry"/"out" directly on "quantum".
+# bin/bundle.sa is this file pre-bundled with lib/bundler.sa.
+
+# @use ../lib/bundler.sa
+
+# Quantum has no exit(); an uncaught raise is what gives a non-zero exit code.
+fn __qbundleFail(message) {
+    raise "[quantum-bundle] " + message
+}
+
+fn __qbundleMain() {
+    let manifestText = Bundler.readText("package.json")
+    if manifestText == null {
+        __qbundleFail("no package.json in the current directory")
+    }
+
+    let manifest = null
+    try {
+        manifest = JSON.parse(manifestText)
+    } catch (e) {
+        __qbundleFail("package.json is not valid JSON: " + str(e))
+    }
+
+    let config = manifest.get("quantum")
+    if type(config) != "dict" {
+        __qbundleFail("package.json has no \"quantum\" config, e.g. \"quantum\": { \"entry\": \"src/main.sa\", \"out\": \"build/main.sa\" }")
+    }
+
+    let bundles = config.get("bundles", [])
+    if config.get("entry") != null {
+        bundles = [{"entry": config["entry"], "out": config.get("out")}] + bundles
+    }
+    if len(bundles) == 0 {
+        __qbundleFail("\"quantum\" config lists no bundles")
+    }
+
+    let options = {"root": ".", "paths": config.get("paths", [])}
+    let failed = false
+    for b in bundles {
+        let entry = b.get("entry")
+        let out = b.get("out")
+        if out == null and entry != null {
+            out = "build/" + entry.split("/")[-1]
+        }
+        # (no `let` inside try: the VM misplaces locals declared there after a catch)
+        let result = null
+        try {
+            result = Bundler.build(entry, out, options)
+        } catch (e) {
+            print("[quantum-bundle] error in " + str(entry) + ": " + str(e))
+            failed = true
+        }
+        if result != null {
+            print("[quantum-bundle] " + entry + " -> " + result["out"] + " (" + str(result["modules"]) + " modules, " + str(result["bytes"]) + " bytes)")
+            for w in result["warnings"] { print("[quantum-bundle] warning: " + w) }
+        }
+    }
+    if failed { __qbundleFail("build failed") }
+}
+
+__qbundleMain()

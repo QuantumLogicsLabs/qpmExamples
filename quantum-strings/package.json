@@ -1,0 +1,17 @@
+{
+  "name": "quantum-strings",
+  "version": "1.0.0",
+  "description": "Everyday string helpers for Quantum: case conversion, slugify, truncate, wrap, templates, HTML escaping, similarity and number formatting.",
+  "main": "index.sa",
+  "keywords": ["quantum", "sa", "string", "case", "slugify", "template", "format"],
+  "license": "MIT",
+  "files": ["index.sa", "README.md"],
+  "scripts": {
+    "test": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa && qrun build/test.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "entry": "test/strings.test.sa",
+    "out": "build/test.sa"
+  }
+}

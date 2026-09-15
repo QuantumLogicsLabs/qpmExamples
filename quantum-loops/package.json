@@ -1,0 +1,17 @@
+{
+  "name": "quantum-loops",
+  "version": "1.0.0",
+  "description": "Loop and iteration helpers for Quantum: times, float/negative ranges, each with BREAK, grid loops, loopWhile/repeatUntil with safety caps, retry, zip, windows, chunk and benchmark.",
+  "main": "index.sa",
+  "keywords": ["quantum", "sa", "loop", "iteration", "range", "each", "retry"],
+  "license": "MIT",
+  "files": ["index.sa", "README.md"],
+  "scripts": {
+    "test": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa && qrun build/test.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "entry": "test/loops.test.sa",
+    "out": "build/test.sa"
+  }
+}

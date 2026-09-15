@@ -1,0 +1,315 @@
+# quantum-term — terminal output helpers for Quantum CLIs
+#
+#   print(Term.green("✓ done"), Term.bold("Build"))
+#   print(Term.table([["Ada", 36], ["Alan", 41]], {"headers": ["Name", "Age"]}))
+#   print(Term.box("Deployed!", {"title": "status"}))
+#   print(Term.progressBar(30, 120))            # [███████░░░░░░░░░░░░░░░░░░░░░]  25%
+#   Log.info("server started")   Log.warn("disk low")   Log.error("boom")
+#
+# Colors are ANSI escapes; set Term.enabled = false (or NO_COLOR=1) for plain text.
+# Exposes globals: Term, Logger, Log
+
+class __QTerm {
+    fn init() {
+        self.enabled = os.getenv("NO_COLOR") == null
+        self.ESC = "["
+        self.codes = {
+            "reset": 0, "bold": 1, "dim": 2, "italic": 3, "underline": 4, "inverse": 7, "strike": 9,
+            "black": 30, "red": 31, "green": 32, "yellow": 33, "blue": 34, "magenta": 35, "cyan": 36, "white": 37, "gray": 90,
+            "bgBlack": 40, "bgRed": 41, "bgGreen": 42, "bgYellow": 43, "bgBlue": 44, "bgMagenta": 45, "bgCyan": 46, "bgWhite": 47
+        }
+        self.borders = {
+            "round":  {"tl": "╭", "tr": "╮", "bl": "╰", "br": "╯", "h": "─", "v": "│", "tm": "┬", "bm": "┴", "ml": "├", "mr": "┤", "mm": "┼"},
+            "single": {"tl": "┌", "tr": "┐", "bl": "└", "br": "┘", "h": "─", "v": "│", "tm": "┬", "bm": "┴", "ml": "├", "mr": "┤", "mm": "┼"},
+            "double": {"tl": "╔", "tr": "╗", "bl": "╚", "br": "╝", "h": "═", "v": "║", "tm": "╦", "bm": "╩", "ml": "╠", "mr": "╣", "mm": "╬"},
+            "ascii":  {"tl": "+", "tr": "+", "bl": "+", "br": "+", "h": "-", "v": "|", "tm": "+", "bm": "+", "ml": "+", "mr": "+", "mm": "+"}
+        }
+    }
+
+    # ── colors ───────────────────────────────────────────────────────────
+
+    # style("bold", "red", text) style names from self.codes; last argument is the text.
+    fn style(names, text) {
+        if not self.enabled { return str(text) }
+        if type(names) == "string" { names = [names] }
+        let seq = names.map(fn(n) { return str(Term.codes[n]) }).join(";")
+        return self.ESC + seq + "m" + str(text) + self.ESC + "0m"
+    }
+
+    fn bold(t) { return self.style("bold", t) }
+    fn dim(t) { return self.style("dim", t) }
+    fn italic(t) { return self.style("italic", t) }
+    fn underline(t) { return self.style("underline", t) }
+    fn inverse(t) { return self.style("inverse", t) }
+    fn red(t) { return self.style("red", t) }
+    fn green(t) { return self.style("green", t) }
+    fn yellow(t) { return self.style("yellow", t) }
+    fn blue(t) { return self.style("blue", t) }
+    fn magenta(t) { return self.style("magenta", t) }
+    fn cyan(t) { return self.style("cyan", t) }
+    fn gray(t) { return self.style("gray", t) }
+
+    # 24-bit color: rgb(255, 128, 0, "orange")
+    fn rgb(r, g, b, text) {
+        if not self.enabled { return str(text) }
+        return self.ESC + "38;2;" + str(r) + ";" + str(g) + ";" + str(b) + "m" + str(text) + self.ESC + "0m"
+    }
+
+    # Removes ANSI color sequences.
+    fn stripAnsi(text) {
+        let out = ""
+        let i = 0
+        let n = len(text)
+        while i < n {
+            if ord(text[i]) == 27 and i + 1 < n and text[i + 1] == "[" {
+                i += 2
+                while i < n and not text[i].isalpha() { i += 1 }
+                i += 1
+                continue
+            }
+            out += text[i]
+            i += 1
+        }
+        return out
+    }
+
+    # Display width: ignores ANSI codes and counts each UTF-8 character once.
+    fn width(text) {
+        let plain = self.stripAnsi(str(text))
+        let count = 0
+        for i in range(len(plain)) {
+            let b = ord(plain[i])
+            if b < 0 { b += 256 }
+            # Skip UTF-8 continuation bytes (10xxxxxx).
+            if b < 128 or b >= 192 { count += 1 }
+        }
+        return count
+    }
+
+    fn padEnd(text, w) {
+        let t = str(text)
+        return t + " ".repeat(max(0, w - self.width(t)))
+    }
+
+    fn padStart(text, w) {
+        let t = str(text)
+        return " ".repeat(max(0, w - self.width(t))) + t
+    }
+
+    fn padCenter(text, w) {
+        let t = str(text)
+        let total = max(0, w - self.width(t))
+        let left = floor(total / 2)
+        return " ".repeat(left) + t + " ".repeat(total - left)
+    }
+
+    fn align(text, w, how) {
+        if how == "right" { return self.padStart(text, w) }
+        if how == "center" { return self.padCenter(text, w) }
+        return self.padEnd(text, w)
+    }
+
+    # ── layout ───────────────────────────────────────────────────────────
+
+    fn divider(w, ch) {
+        if w == null { w = 40 }
+        if ch == null { ch = "─" }
+        return ch.repeat(w)
+    }
+
+    # rows: arrays, or dicts (headers default to the first dict's keys).
+    # options: {"headers": [...], "align": ["left", "right"], "border": "round|single|double|ascii"}
+    fn table(rows, options) {
+        if options == null { options = {} }
+        let headers = options.get("headers")
+        let data = rows
+        if len(rows) > 0 and type(rows[0]) == "dict" {
+            if headers == null { headers = rows[0].keys() }
+            data = rows.map(fn(r) { return headers.map(fn(h) { return r.get(h, "") }) })
+        }
+        let b = self.borders[options.get("border", "round")]
+        let aligns = options.get("align", [])
+
+        let colCount = headers == null ? 0 : len(headers)
+        for r in data { colCount = max(colCount, len(r)) }
+        let widths = []
+        for c in range(colCount) { widths.push(0) }
+        let all = headers == null ? data : [headers] + data
+        for r in all {
+            for c in range(len(r)) { widths[c] = max(widths[c], self.width(r[c] == null ? "" : r[c])) }
+        }
+
+        let line = fn(left, mid, right) {
+            return left + widths.map(fn(w) { return b["h"].repeat(w + 2) }).join(mid) + right
+        }
+        let renderRow = fn(r, isHeader) {
+            let cells = []
+            for c in range(colCount) {
+                let v = c < len(r) and r[c] != null ? str(r[c]) : ""
+                let how = c < len(aligns) ? aligns[c] : "left"
+                let cell = Term.align(v, widths[c], how)
+                cells.push(" " + (isHeader ? Term.bold(cell) : cell) + " ")
+            }
+            return b["v"] + cells.join(b["v"]) + b["v"]
+        }
+
+        let out = [line(b["tl"], b["tm"], b["tr"])]
+        if headers != null {
+            out.push(renderRow(headers, true))
+            out.push(line(b["ml"], b["mm"], b["mr"]))
+        }
+        for r in data { out.push(renderRow(r, false)) }
+        out.push(line(b["bl"], b["bm"], b["br"]))
+        return out.join("\n")
+    }
+
+    # options: {"title": "...", "padding": 1, "border": "round"}
+    fn box(text, options) {
+        if options == null { options = {} }
+        let b = self.borders[options.get("border", "round")]
+        let pad = options.get("padding", 1)
+        let lines = str(text).split("\n")
+        let inner = 0
+        for l in lines { inner = max(inner, self.width(l)) }
+        let title = options.get("title")
+        if title != null { inner = max(inner, self.width(title) + 2) }
+        let full = inner + pad * 2
+
+        let top = b["tl"] + b["h"].repeat(full) + b["tr"]
+        if title != null {
+            let label = " " + title + " "
+            top = b["tl"] + b["h"] + label + b["h"].repeat(max(0, full - 1 - self.width(label))) + b["tr"]
+        }
+        let out = [top]
+        for l in lines {
+            out.push(b["v"] + " ".repeat(pad) + self.padEnd(l, inner) + " ".repeat(pad) + b["v"])
+        }
+        out.push(b["bl"] + b["h"].repeat(full) + b["br"])
+        return out.join("\n")
+    }
+
+    # [██████░░░░]  60%
+    fn progressBar(current, total, w) {
+        if w == null { w = 30 }
+        let ratio = total <= 0 ? 1 : min(1, max(0, current / total))
+        let filled = floor(ratio * w)
+        let percent = str(floor(ratio * 100))
+        return "[" + "█".repeat(filled) + "░".repeat(w - filled) + "] " + " ".repeat(3 - len(percent)) + percent + "%"
+    }
+
+    # Frame i of a spinner animation.
+    fn spinner(i, style) {
+        let frames = style == "line" ? ["-", "\\", "|", "/"] : ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        return frames[i % len(frames)]
+    }
+
+    fn bulletList(items, bullet) {
+        if bullet == null { bullet = "•" }
+        return items.map(fn(x) { return bullet + " " + str(x) }).join("\n")
+    }
+
+    fn numberedList(items) {
+        let w = len(str(len(items)))
+        let out = []
+        for i in range(len(items)) {
+            out.push(self.padStart(str(i + 1), w) + ". " + str(items[i]))
+        }
+        return out.join("\n")
+    }
+
+    # Renders nested dicts/arrays as a tree:
+    #   root
+    #   ├── src
+    #   │   └── main.sa
+    #   └── README.md
+    fn tree(value, label) {
+        let lines = []
+        if label != null { lines.push(str(label)) }
+        self.treeLines(value, "", lines)
+        return lines.join("\n")
+    }
+
+    fn treeLines(value, prefix, lines) {
+        let entries = []
+        if type(value) == "dict" {
+            for k in value.keys() { entries.push([k, value[k]]) }
+        } else if type(value) == "array" {
+            for v in value {
+                if type(v) == "dict" or type(v) == "array" {
+                    entries.push(["", v])
+                } else {
+                    entries.push([str(v), null])
+                }
+            }
+        }
+        for i in range(len(entries)) {
+            let last = i == len(entries) - 1
+            let key = entries[i][0]
+            let child = entries[i][1]
+            let leafValue = child != null and type(child) != "dict" and type(child) != "array"
+            let text = leafValue ? key + ": " + str(child) : key
+            lines.push(prefix + (last ? "└── " : "├── ") + text)
+            if child != null and not leafValue {
+                self.treeLines(child, prefix + (last ? "    " : "│   "), lines)
+            }
+        }
+    }
+}
+
+Term = __QTerm()
+
+# Leveled logger. Output goes through `sink` (default print) so it can be captured.
+class Logger {
+    fn init(name, level) {
+        self.name = name
+        self.levels = {"debug": 10, "info": 20, "success": 25, "warn": 30, "error": 40, "silent": 100}
+        self.level = level == null ? "info" : level
+        self.timestamps = false
+        self.sink = fn(line) { print(line) }
+    }
+
+    fn setLevel(level) {
+        if not (level in self.levels) { raise "unknown log level: " + level }
+        self.level = level
+        return self
+    }
+
+    fn enabledFor(level) {
+        return self.levels[level] >= self.levels[self.level]
+    }
+
+    fn clockTime() {
+        let t = floor(time())
+        let s = t % 86400
+        let two = fn(n) { return n < 10 ? "0" + str(n) : str(n) }
+        return two(floor(s / 3600)) + ":" + two(floor((s % 3600) / 60)) + ":" + two(s % 60)
+    }
+
+    fn write(level, badge, color, message) {
+        if not self.enabledFor(level) { return false }
+        let parts = []
+        if self.timestamps { parts.push(Term.gray(self.clockTime())) }
+        parts.push(Term.style(color, badge))
+        if self.name != null { parts.push(Term.gray("[" + self.name + "]")) }
+        parts.push(str(message))
+        self.sink(parts.join(" "))
+        return true
+    }
+
+    fn debug(msg) { return self.write("debug", "DEBUG", "gray", msg) }
+    fn info(msg) { return self.write("info", "INFO ", "cyan", msg) }
+    fn success(msg) { return self.write("success", "OK   ", "green", msg) }
+    fn warn(msg) { return self.write("warn", "WARN ", "yellow", msg) }
+    fn error(msg) { return self.write("error", "ERROR", ["bold", "red"], msg) }
+
+    # A logger that prefixes messages with a sub-name.
+    fn child(name) {
+        let full = self.name == null ? name : self.name + ":" + name
+        let c = Logger(full, self.level)
+        c.timestamps = self.timestamps
+        c.sink = self.sink
+        return c
+    }
+}
+
+Log = Logger(null, "info")

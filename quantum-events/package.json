@@ -1,0 +1,17 @@
+{
+  "name": "quantum-events",
+  "version": "1.0.0",
+  "description": "Event-driven building blocks for Quantum: EventEmitter (on/once/off/wildcard), a Redux-style Store with middleware, undo and watch, and a StateMachine with enter/leave hooks.",
+  "main": "index.sa",
+  "keywords": ["quantum", "sa", "events", "emitter", "store", "state", "state-machine", "pubsub"],
+  "license": "MIT",
+  "files": ["index.sa", "README.md"],
+  "scripts": {
+    "test": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa && qrun build/test.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "entry": "test/events.test.sa",
+    "out": "build/test.sa"
+  }
+}

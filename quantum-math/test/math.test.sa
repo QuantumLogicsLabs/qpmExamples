@@ -1,0 +1,153 @@
+# @use quantum-test
+# @use ../index.sa
+
+describe("QMath basics", fn() {
+    it("clamps, interpolates and maps", fn() {
+        expect(QMath.clamp(15, 0, 10)).toBe(10)
+        expect(QMath.clamp(-3, 0, 10)).toBe(0)
+        expect(QMath.lerp(10, 20, 0.25)).toBe(12.5)
+        expect(QMath.mapRange(5, 0, 10, 0, 100)).toBe(50)
+        expect(QMath.roundTo(3.14159, 2)).toBe(3.14)
+    })
+    it("handles signs, truncation and modulo", fn() {
+        expect([QMath.sign(-4), QMath.sign(0), QMath.sign(9)]).toEqual([-1, 0, 1])
+        expect(QMath.trunc(-3.7)).toBe(-3)
+        expect(QMath.trunc(3.7)).toBe(3)
+        expect(QMath.mod(-1, 5)).toBe(4)
+        expect(QMath.isEven(-4)).toBeTruthy()
+        expect(QMath.isOdd(-3)).toBeTruthy()
+        expect(QMath.isInteger(4.0)).toBeTruthy()
+        expect(QMath.isInteger(4.5)).toBeFalsy()
+    })
+    it("converts angles and percentages", fn() {
+        expect(QMath.degToRad(180)).toBeCloseTo(PI)
+        expect(QMath.radToDeg(PI / 2)).toBeCloseTo(90)
+        expect(QMath.hypot(3, 4)).toBe(5)
+        expect(QMath.percentOf(25, 200)).toBe(12.5)
+        expect(QMath.percentChange(80, 100)).toBe(25)
+    })
+})
+
+describe("QMath number theory", fn() {
+    it("computes factorials and fibonacci", fn() {
+        expect(QMath.factorial(0)).toBe(1)
+        expect(QMath.factorial(10)).toBe(3628800)
+        expect(QMath.fibonacci(10)).toBe(55)
+        expect(QMath.fibonacciSequence(7)).toEqual([0, 1, 1, 2, 3, 5, 8])
+    })
+    it("finds primes, factors and divisors", fn() {
+        expect(QMath.isPrime(97)).toBeTruthy()
+        expect(QMath.isPrime(91)).toBeFalsy()
+        expect(QMath.isPrime(1)).toBeFalsy()
+        expect(QMath.primesUpTo(30)).toEqual([2, 3, 5, 7, 11, 13, 17, 19, 23, 29])
+        expect(QMath.primeFactors(360)).toEqual([2, 2, 2, 3, 3, 5])
+        expect(QMath.divisors(36)).toEqual([1, 2, 3, 4, 6, 9, 12, 18, 36])
+        expect(QMath.isPerfect(28)).toBeTruthy()
+    })
+    it("computes gcd and lcm", fn() {
+        expect(QMath.gcd(48, -18)).toBe(6)
+        expect(QMath.lcm(4, 6)).toBe(12)
+        expect(QMath.gcdOf([12, 18, 30])).toBe(6)
+        expect(QMath.lcmOf([2, 3, 4])).toBe(12)
+    })
+    it("works with digits and bases", fn() {
+        expect(QMath.digits(9051)).toEqual([9, 0, 5, 1])
+        expect(QMath.digitSum(9051)).toBe(15)
+        expect(QMath.isArmstrong(153)).toBeTruthy()
+        expect(QMath.toBase(255, 16)).toBe("ff")
+        expect(QMath.toBase(-10, 2)).toBe("-1010")
+        expect(QMath.fromBase("FF", 16)).toBe(255)
+        expect(QMath.fromBase("zz", 36)).toBe(1295)
+        expect(fn() { QMath.fromBase("12", 2) }).toThrow()
+    })
+    it("converts roman numerals", fn() {
+        expect(QMath.toRoman(2024)).toBe("MMXXIV")
+        expect(QMath.toRoman(3999)).toBe("MMMCMXCIX")
+        expect(QMath.fromRoman("mcmxciv")).toBe(1994)
+    })
+})
+
+describe("QMath combinatorics", fn() {
+    it("counts selections", fn() {
+        expect(QMath.nCr(5, 2)).toBe(10)
+        expect(QMath.nCr(52, 5)).toBe(2598960)
+        expect(QMath.nPr(5, 2)).toBe(20)
+    })
+    it("enumerates permutations, combinations and subsets", fn() {
+        expect(QMath.permutations([1, 2, 3])).toEqual([[1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]])
+        expect(QMath.combinations(["a", "b", "c"], 2)).toEqual([["a", "b"], ["a", "c"], ["b", "c"]])
+        expect(QMath.powerSet([1, 2])).toEqual([[], [1], [2], [1, 2]])
+    })
+})
+
+describe("QMath statistics", fn() {
+    let data = [2, 4, 4, 4, 5, 5, 7, 9]
+    it("computes central tendency", fn() {
+        expect(QMath.sum(data)).toBe(40)
+        expect(QMath.mean(data)).toBe(5)
+        expect(QMath.median(data)).toBe(4.5)
+        expect(QMath.median([3, 1, 2])).toBe(2)
+        expect(QMath.mode(data)).toEqual([4])
+        expect(QMath.mode([1, 2, 2, 1])).toEqual([1, 2])
+    })
+    it("computes spread", fn() {
+        expect(QMath.variance(data)).toBe(4)
+        expect(QMath.stdDev(data)).toBe(2)
+        expect(QMath.variance(data, true)).toBeCloseTo(4.571428, 5)
+        expect(QMath.minOf(data)).toBe(2)
+        expect(QMath.maxOf(data)).toBe(9)
+        expect(QMath.percentile([1, 2, 3, 4, 5], 50)).toBe(3)
+        expect(QMath.percentile([1, 2, 3, 4], 25)).toBe(1.75)
+    })
+    it("transforms and relates series", fn() {
+        expect(QMath.weightedMean([80, 90], [1, 3])).toBe(87.5)
+        expect(QMath.cumulativeSum([1, 2, 3])).toEqual([1, 3, 6])
+        expect(QMath.normalize([10, 15, 20])).toEqual([0, 0.5, 1])
+        expect(QMath.correlation([1, 2, 3], [2, 4, 6])).toBeCloseTo(1)
+        let line = QMath.linearRegression([1, 2, 3, 4], [3, 5, 7, 9])
+        expect(line["slope"]).toBeCloseTo(2)
+        expect(line["intercept"]).toBeCloseTo(1)
+    })
+})
+
+describe("QMath matrices", fn() {
+    it("does vector math", fn() {
+        expect(QMath.dot([1, 2, 3], [4, 5, 6])).toBe(32)
+        expect(QMath.magnitude([3, 4])).toBe(5)
+        expect(QMath.distance([0, 0], [6, 8])).toBe(10)
+    })
+    it("builds and combines matrices", fn() {
+        expect(QMath.identity(2)).toEqual([[1, 0], [0, 1]])
+        expect(QMath.matrix(2, 3, 7)).toEqual([[7, 7, 7], [7, 7, 7]])
+        expect(QMath.transpose([[1, 2, 3], [4, 5, 6]])).toEqual([[1, 4], [2, 5], [3, 6]])
+        expect(QMath.addMatrices([[1, 2]], [[3, 4]])).toEqual([[4, 6]])
+        expect(QMath.scaleMatrix([[1, 2]], 3)).toEqual([[3, 6]])
+        expect(QMath.multiply([[1, 2], [3, 4]], [[5, 6], [7, 8]])).toEqual([[19, 22], [43, 50]])
+        expect(fn() { QMath.multiply([[1, 2]], [[1, 2]]) }).toThrow()
+    })
+    it("computes determinants and inverses", fn() {
+        expect(QMath.determinant([[4, 6], [3, 8]])).toBeCloseTo(14)
+        expect(QMath.determinant([[6, 1, 1], [4, -2, 5], [2, 8, 7]])).toBeCloseTo(-306)
+        expect(QMath.determinant([[1, 2], [2, 4]])).toBe(0)
+        let inv = QMath.inverse([[4, 7], [2, 6]])
+        expect(inv[0][0]).toBeCloseTo(0.6)
+        expect(inv[0][1]).toBeCloseTo(-0.7)
+        expect(inv[1][0]).toBeCloseTo(-0.2)
+        expect(inv[1][1]).toBeCloseTo(0.4)
+        expect(fn() { QMath.inverse([[1, 2], [2, 4]]) }).toThrow()
+    })
+})
+
+describe("QMath geometry & finance", fn() {
+    it("computes areas", fn() {
+        expect(QMath.circleArea(2)).toBeCloseTo(12.566370, 5)
+        expect(QMath.triangleArea(3, 4, 5)).toBe(6)
+    })
+    it("computes interest and loan payments", fn() {
+        expect(QMath.compoundInterest(1000, 0.05, 10, 1)).toBeCloseTo(1628.894627, 5)
+        expect(QMath.loanPayment(200000, 0.06, 360)).toBeCloseTo(1199.10, 2)
+        expect(QMath.loanPayment(1200, 0, 12)).toBe(100)
+    })
+})
+
+Test.report()

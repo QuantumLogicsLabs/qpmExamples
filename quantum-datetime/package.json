@@ -1,0 +1,17 @@
+{
+  "name": "quantum-datetime",
+  "version": "1.0.0",
+  "description": "Dates and times for Quantum: ISO parsing with offsets, token formatting, calendar-aware month/year math, diffs, period boundaries, relative times and durations.",
+  "main": "index.sa",
+  "keywords": ["quantum", "sa", "date", "time", "datetime", "format", "parse", "calendar"],
+  "license": "MIT",
+  "files": ["index.sa", "README.md"],
+  "scripts": {
+    "test": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa && qrun build/test.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "entry": "test/datetime.test.sa",
+    "out": "build/test.sa"
+  }
+}

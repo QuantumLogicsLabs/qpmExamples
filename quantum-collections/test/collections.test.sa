@@ -1,0 +1,170 @@
+# @use quantum-test
+# @use ../index.sa
+
+describe("Stack / Queue / Deque", fn() {
+    it("stack is LIFO", fn() {
+        let s = Stack()
+        s.push(1).push(2).push(3)
+        expect(s.peek()).toBe(3)
+        expect(s.pop()).toBe(3)
+        expect(s.size()).toBe(2)
+        expect(s.toArray()).toEqual([1, 2])
+        s.clear()
+        expect(s.isEmpty()).toBeTruthy()
+        expect(s.pop()).toBeNull()
+    })
+    it("queue is FIFO and compacts", fn() {
+        let q = Queue(["a"])
+        q.enqueue("b").enqueue("c")
+        expect(q.dequeue()).toBe("a")
+        expect(q.peek()).toBe("b")
+        expect(q.size()).toBe(2)
+        for i in range(100) { q.enqueue(i) }
+        for i in range(90) { q.dequeue() }
+        expect(q.size()).toBe(12)
+        expect(q.dequeue()).toBe(88)
+        expect(q.toArray()).toEqual([89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99])
+        expect(Queue().dequeue()).toBeNull()
+    })
+    it("deque works at both ends", fn() {
+        let d = Deque([2])
+        d.pushFront(1).pushBack(3)
+        expect(d.toArray()).toEqual([1, 2, 3])
+        expect(d.popFront()).toBe(1)
+        expect(d.popBack()).toBe(3)
+        expect([d.peekFront(), d.peekBack(), d.size()]).toEqual([2, 2, 1])
+    })
+})
+
+describe("UniqueSet", fn() {
+    it("keeps unique values by type", fn() {
+        let s = UniqueSet([1, "1", 1, 2])
+        expect(s.size()).toBe(3)
+        expect(s.has("1")).toBeTruthy()
+        expect(s.has(3)).toBeFalsy()
+        expect(s.remove(2)).toBeTruthy()
+        expect(s.remove(2)).toBeFalsy()
+    })
+    it("supports set algebra", fn() {
+        let a = UniqueSet([1, 2, 3])
+        let b = UniqueSet([2, 3, 4])
+        expect(sorted(a.union(b).values())).toEqual([1, 2, 3, 4])
+        expect(sorted(a.intersection(b).values())).toEqual([2, 3])
+        expect(a.difference(b).values()).toEqual([1])
+        expect(UniqueSet([2, 3]).isSubsetOf(a)).toBeTruthy()
+        expect(b.isSubsetOf(a)).toBeFalsy()
+    })
+})
+
+describe("PriorityQueue", fn() {
+    it("pops smallest first by default", fn() {
+        let pq = PriorityQueue()
+        for x in [5, 1, 8, 3, 9, 2, 7] { pq.push(x) }
+        expect(pq.peek()).toBe(1)
+        expect(pq.toSortedArray()).toEqual([1, 2, 3, 5, 7, 8, 9])
+        expect(pq.size()).toBe(7)
+        expect([pq.pop(), pq.pop(), pq.pop()]).toEqual([1, 2, 3])
+    })
+    it("accepts a custom comparator", fn() {
+        let tasks = PriorityQueue(fn(a, b) { return b["priority"] - a["priority"] })
+        tasks.push({"name": "low", "priority": 1})
+        tasks.push({"name": "urgent", "priority": 10})
+        tasks.push({"name": "normal", "priority": 5})
+        expect(tasks.pop()["name"]).toBe("urgent")
+        expect(tasks.pop()["name"]).toBe("normal")
+        expect(tasks.pop()["name"]).toBe("low")
+        expect(tasks.pop()).toBeNull()
+    })
+})
+
+describe("LRUCache & Counter", fn() {
+    it("evicts the least recently used entry", fn() {
+        let cache = LRUCache(2)
+        cache.set("a", 1).set("b", 2)
+        expect(cache.get("a")).toBe(1)
+        cache.set("c", 3)
+        expect(cache.has("b")).toBeFalsy()
+        expect(cache.keys()).toEqual(["a", "c"])
+        expect(cache.get("missing", "fallback")).toBe("fallback")
+        expect(cache.remove("a")).toBeTruthy()
+        expect(cache.size()).toBe(1)
+    })
+    it("counts items", fn() {
+        let c = Counter(["red", "blue", "red", "green", "blue", "red"])
+        expect(c.get("red")).toBe(3)
+        expect(c.get("pink")).toBe(0)
+        expect(c.total()).toBe(6)
+        expect(c.mostCommon(2)).toEqual([["red", 3], ["blue", 2]])
+        c.add("green", 5)
+        expect(c.mostCommon(1)).toEqual([["green", 6]])
+    })
+})
+
+describe("Collections arrays", fn() {
+    let people = [
+        {"name": "Zoe", "age": 31, "role": "dev"},
+        {"name": "Adam", "age": 25, "role": "ops"},
+        {"name": "Mia", "age": 25, "role": "dev"}
+    ]
+    it("sorts stably by key and comparator", fn() {
+        expect(Collections.pluck(Collections.sortBy(people, fn(p) { return p["age"] }), "name")).toEqual(["Adam", "Mia", "Zoe"])
+        expect(Collections.pluck(Collections.sortBy(people, fn(p) { return p["name"] }), "name")).toEqual(["Adam", "Mia", "Zoe"])
+        expect(Collections.pluck(Collections.sortBy(people, fn(p) { return p["age"] }, true), "name")).toEqual(["Zoe", "Adam", "Mia"])
+        expect(Collections.sortWith([3, 1, 2], fn(a, b) { return b - a })).toEqual([3, 2, 1])
+    })
+    it("groups, counts and keys", fn() {
+        let groups = Collections.groupBy(people, fn(p) { return p["role"] })
+        expect(len(groups["dev"])).toBe(2)
+        expect(Collections.countBy(people, fn(p) { return p["age"] })).toEqual({"25": 2, "31": 1})
+        expect(Collections.countBy(["a", "b", "a"])).toEqual({"a": 2, "b": 1})
+        expect(Collections.keyBy(people, fn(p) { return p["name"] })["Mia"]["age"]).toBe(25)
+    })
+    it("partitions, dedupes and aggregates", fn() {
+        expect(Collections.partition([1, 2, 3, 4], fn(x) { return x % 2 == 0 })).toEqual([[2, 4], [1, 3]])
+        expect(Collections.unique([1, 2, 1, "1", 3])).toEqual([1, 2, "1", 3])
+        expect(Collections.pluck(Collections.uniqueBy(people, fn(p) { return p["age"] }), "name")).toEqual(["Zoe", "Adam"])
+        expect(Collections.sumBy(people, fn(p) { return p["age"] })).toBe(81)
+        expect(Collections.minBy(people, fn(p) { return p["age"] })["name"]).toBe("Adam")
+        expect(Collections.maxBy(people, fn(p) { return p["name"] })["name"]).toBe("Zoe")
+        expect(Collections.compact([0, null, 1, false, "", 2])).toEqual([0, 1, "", 2])
+    })
+    it("combines arrays and searches", fn() {
+        expect(Collections.intersect([1, 2, 2, 3], [2, 3, 4])).toEqual([2, 3])
+        expect(Collections.difference([1, 2, 3], [2])).toEqual([1, 3])
+        expect(Collections.union([1, 2], [2, 3])).toEqual([1, 2, 3])
+        expect(Collections.binarySearch([1, 3, 5, 7, 9], 7)).toBe(3)
+        expect(Collections.binarySearch(["a", "c", "e"], "c")).toBe(1)
+        expect(Collections.binarySearch([1, 3], 2)).toBe(-1)
+    })
+})
+
+describe("Collections dicts", fn() {
+    it("picks, omits, inverts and zips", fn() {
+        let d = {"a": 1, "b": 2, "c": 3}
+        expect(Collections.pick(d, ["a", "c", "z"])).toEqual({"a": 1, "c": 3})
+        expect(Collections.omit(d, ["b"])).toEqual({"a": 1, "c": 3})
+        expect(Collections.invert({"x": "1", "y": "2"})).toEqual({"1": "x", "2": "y"})
+        expect(Collections.fromPairs([["k", 1], ["j", 2]])).toEqual({"k": 1, "j": 2})
+        expect(Collections.zipObject(["a", "b"], [1])).toEqual({"a": 1, "b": null})
+    })
+    it("reads and writes nested paths", fn() {
+        let cfg = {"db": {"primary": {"port": 5432}}, "users": [{"name": "ada"}]}
+        expect(Collections.getPath(cfg, "db.primary.port")).toBe(5432)
+        expect(Collections.getPath(cfg, "users.0.name")).toBe("ada")
+        expect(Collections.getPath(cfg, "db.replica.port", 0)).toBe(0)
+        Collections.setPath(cfg, "cache.redis.ttl", 60)
+        expect(cfg["cache"]["redis"]["ttl"]).toBe(60)
+    })
+    it("clones and merges deeply", fn() {
+        let base = {"server": {"host": "localhost", "port": 80}, "tags": ["a"]}
+        let copy = Collections.deepClone(base)
+        copy["server"]["port"] = 81
+        copy["tags"].push("b")
+        expect(base["server"]["port"]).toBe(80)
+        expect(base["tags"]).toEqual(["a"])
+        let merged = Collections.deepMerge(base, {"server": {"port": 8080}, "debug": true})
+        expect(merged).toEqual({"server": {"host": "localhost", "port": 8080}, "tags": ["a"], "debug": true})
+    })
+})
+
+Test.report()

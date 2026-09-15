@@ -1,0 +1,337 @@
+# quantum-loops — loop & iteration helpers for Quantum
+#
+#   Loop.times(3, fn(i) { print("row", i) })
+#   Loop.each(items, fn(item, i) {
+#       if item == "stop" { return Loop.BREAK }      # early exit from a callback loop
+#   })
+#   Loop.range(0, 1, 0.25)                           # [0, 0.25, 0.5, 0.75]
+#   Loop.grid(3, 3, fn(r, c) { ... })                # nested row/column loop
+#   Loop.windows([1, 2, 3, 4], 2)                    # [[1, 2], [2, 3], [3, 4]]
+#
+# Callbacks may declare fewer parameters than are passed (e.g. fn(item) for
+# each), extra arguments are ignored.
+#
+# Exposes the global: Loop
+
+class __QLoop {
+    fn init() {
+        # Return this from a callback to stop each/eachKey/eachReverse/grid/countdown/loopWhile early.
+        self.BREAK = {"__qloop_break": true}
+        # Safety cap for loopWhile/repeatUntil so a bad condition cannot hang forever.
+        self.MAX_ITERATIONS = 1000000
+    }
+
+    fn isBreak(v) {
+        return type(v) == "dict" and v.get("__qloop_break") == true
+    }
+
+    # ── counting loops ───────────────────────────────────────────────────
+
+    # Calls f(i) for i = 0..n-1 and returns the collected results.
+    fn times(n, f) {
+        let out = []
+        for i in range(n) { out.push(f(i)) }
+        return out
+    }
+
+    # Numbers from start (inclusive) to end (exclusive); step may be fractional or negative.
+    #   range(5) -> [0..4], range(1, 4) -> [1, 2, 3], range(10, 0, -5) -> [10, 5]
+    fn range(start, end, step) {
+        if end == null {
+            end = start
+            start = 0
+        }
+        if step == null { step = start <= end ? 1 : -1 }
+        if step == 0 { raise "Loop.range step cannot be 0" }
+        let out = []
+        let count = ceil((end - start) / step - 0.0000000001)
+        for i in range(max(count, 0)) { out.push(start + i * step) }
+        return out
+    }
+
+    # Like range, but includes `end` when the steps land on it.
+    fn rangeInclusive(start, end, step) {
+        if step == null { step = start <= end ? 1 : -1 }
+        let out = self.range(start, end, step)
+        let last = start + len(out) * step
+        if abs(last - end) < 0.0000000001 { out.push(end) }
+        return out
+    }
+
+    # `count` evenly spaced numbers from a to b (both included).
+    fn linspace(a, b, count) {
+        if count <= 0 { return [] }
+        if count == 1 { return [a] }
+        let out = []
+        let step = (b - a) / (count - 1)
+        for i in range(count) { out.push(a + i * step) }
+        out[count - 1] = b
+        return out
+    }
+
+    # Calls f(n) from `start` down to `end` inclusive (default 0).
+    fn countdown(start, end, f) {
+        if end == null { end = 0 }
+        for n in range(start, end - 1, -1) {
+            if self.isBreak(f(n)) { return }
+        }
+    }
+
+    # Nested loop over a rows x cols grid: f(row, col). Returns the number of cells visited.
+    fn grid(rows, cols, f) {
+        let visited = 0
+        for r in range(rows) {
+            for c in range(cols) {
+                visited += 1
+                if self.isBreak(f(r, c)) { return visited }
+            }
+        }
+        return visited
+    }
+
+    # ── collection loops ─────────────────────────────────────────────────
+
+    # f(item, index); return Loop.BREAK to stop. Returns the number of items visited.
+    fn each(arr, f) {
+        for i in range(len(arr)) {
+            if self.isBreak(f(arr[i], i)) { return i + 1 }
+        }
+        return len(arr)
+    }
+
+    fn eachReverse(arr, f) {
+        let visited = 0
+        for i in range(len(arr) - 1, -1, -1) {
+            visited += 1
+            if self.isBreak(f(arr[i], i)) { return visited }
+        }
+        return visited
+    }
+
+    # f(key, value) for each dict entry (keys in the dict's own order).
+    fn eachKey(d, f) {
+        let visited = 0
+        for k in d.keys() {
+            visited += 1
+            if self.isBreak(f(k, d[k])) { return visited }
+        }
+        return visited
+    }
+
+    # Calls f(item, index) on every `step`-th item.
+    fn eachStep(arr, step, f) {
+        let i = 0
+        while i < len(arr) {
+            if self.isBreak(f(arr[i], i)) { return }
+            i += step
+        }
+    }
+
+    fn mapIndexed(arr, f) {
+        let out = []
+        for i in range(len(arr)) { out.push(f(arr[i], i)) }
+        return out
+    }
+
+    fn filterIndexed(arr, f) {
+        let out = []
+        for i in range(len(arr)) {
+            if f(arr[i], i) { out.push(arr[i]) }
+        }
+        return out
+    }
+
+    # ── condition loops ──────────────────────────────────────────────────
+
+    # Runs body(i) while cond(i) is truthy. Returns the iteration count.
+    fn loopWhile(cond, body, maxIterations) {
+        if maxIterations == null { maxIterations = self.MAX_ITERATIONS }
+        let i = 0
+        while cond(i) {
+            if i >= maxIterations { raise "Loop.loopWhile exceeded " + str(maxIterations) + " iterations" }
+            if self.isBreak(body(i)) { return i + 1 }
+            i += 1
+        }
+        return i
+    }
+
+    # Runs body(i) until it returns a truthy value (like do/while). Returns the iteration count.
+    fn repeatUntil(body, maxIterations) {
+        if maxIterations == null { maxIterations = self.MAX_ITERATIONS }
+        let i = 0
+        while i < maxIterations {
+            let done = body(i)
+            i += 1
+            if done { return i }
+        }
+        raise "Loop.repeatUntil exceeded " + str(maxIterations) + " iterations"
+    }
+
+    # Items from the front while pred(item, i) holds.
+    fn takeWhile(arr, pred) {
+        let out = []
+        for i in range(len(arr)) {
+            if not pred(arr[i], i) { return out }
+            out.push(arr[i])
+        }
+        return out
+    }
+
+    fn dropWhile(arr, pred) {
+        for i in range(len(arr)) {
+            if not pred(arr[i], i) { return arr.slice(i) }
+        }
+        return []
+    }
+
+    fn findIndex(arr, pred) {
+        for i in range(len(arr)) {
+            if pred(arr[i], i) { return i }
+        }
+        return -1
+    }
+
+    fn findLastIndex(arr, pred) {
+        for i in range(len(arr) - 1, -1, -1) {
+            if pred(arr[i], i) { return i }
+        }
+        return -1
+    }
+
+    # Calls f() up to `attempts` times until it stops raising.
+    # Returns {"ok", "value", "attempts", "error"}.
+    fn retry(f, attempts) {
+        if attempts == null { attempts = 3 }
+        let lastError = null
+        let value = null
+        for i in range(attempts) {
+            # (no `let` inside try: the VM misplaces locals declared there after a catch)
+            let failed = false
+            try {
+                value = f(i + 1)
+            } catch (e) {
+                lastError = e
+                failed = true
+            }
+            if not failed {
+                return {"ok": true, "value": value, "attempts": i + 1, "error": null}
+            }
+        }
+        return {"ok": false, "value": null, "attempts": attempts, "error": lastError}
+    }
+
+    # ── shaping sequences ────────────────────────────────────────────────
+
+    # [[index, item], ...]
+    fn enumerate(arr) {
+        let out = []
+        for i in range(len(arr)) { out.push([i, arr[i]]) }
+        return out
+    }
+
+    # Pairs items by position; stops at the shorter array.
+    fn zip(a, b) {
+        let out = []
+        for i in range(min(len(a), len(b))) { out.push([a[i], b[i]]) }
+        return out
+    }
+
+    fn unzip(pairs) {
+        let left = []
+        let right = []
+        for p in pairs {
+            left.push(p[0])
+            right.push(p[1])
+        }
+        return [left, right]
+    }
+
+    # Every combination of one item from a and one from b.
+    fn product(a, b) {
+        let out = []
+        for x in a {
+            for y in b { out.push([x, y]) }
+        }
+        return out
+    }
+
+    # Sliding windows of `size` items.
+    fn windows(arr, size) {
+        let out = []
+        for i in range(len(arr) - size + 1) { out.push(arr.slice(i, i + size)) }
+        return out
+    }
+
+    # Consecutive pairs: [1, 2, 3] -> [[1, 2], [2, 3]]
+    fn pairs(arr) {
+        return self.windows(arr, 2)
+    }
+
+    # Groups of `size` items; the last group may be shorter.
+    fn chunk(arr, size) {
+        if size <= 0 { raise "Loop.chunk size must be positive" }
+        let out = []
+        let i = 0
+        while i < len(arr) {
+            out.push(arr.slice(i, min(i + size, len(arr))))
+            i += size
+        }
+        return out
+    }
+
+    # Deep flatten (pass depth = 1 for one level).
+    fn flatten(arr, depth) {
+        if depth == null { depth = -1 }
+        let out = []
+        for x in arr {
+            if type(x) == "array" and depth != 0 {
+                for y in self.flatten(x, depth - 1) { out.push(y) }
+            } else {
+                out.push(x)
+            }
+        }
+        return out
+    }
+
+    # Repeats the items of arr until `count` items have been produced.
+    fn cycle(arr, count) {
+        let out = []
+        if len(arr) == 0 { return out }
+        for i in range(count) { out.push(arr[i % len(arr)]) }
+        return out
+    }
+
+    # Alternates items: [1, 3], [2, 4, 6] -> [1, 2, 3, 4, 6]
+    fn interleave(a, b) {
+        let out = []
+        for i in range(max(len(a), len(b))) {
+            if i < len(a) { out.push(a[i]) }
+            if i < len(b) { out.push(b[i]) }
+        }
+        return out
+    }
+
+    # Running reduce: [1, 2, 3] with + -> [1, 3, 6]
+    fn accumulate(arr, f, initial) {
+        let out = []
+        let acc = initial
+        for i in range(len(arr)) {
+            acc = (i == 0 and initial == null) ? arr[0] : f(acc, arr[i])
+            out.push(acc)
+        }
+        return out
+    }
+
+    # ── timing ───────────────────────────────────────────────────────────
+
+    # Runs f `iterations` times; returns {"total", "average", "iterations"} in seconds.
+    fn benchmark(f, iterations) {
+        if iterations == null { iterations = 1000 }
+        let start = clock()
+        for i in range(iterations) { f(i) }
+        let total = clock() - start
+        return {"total": total, "average": total / iterations, "iterations": iterations}
+    }
+}
+
+Loop = __QLoop()

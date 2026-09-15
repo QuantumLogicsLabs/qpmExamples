@@ -1,0 +1,15 @@
+{
+  "name": "qpm-test-sa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Demo Quantum project that consumes the .sa qpm packages: reads a CSV, validates rows, aggregates sales and prints a terminal report.",
+  "scripts": {
+    "build": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa",
+    "start": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa && qrun build/main.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "entry": "src/main.sa",
+    "out": "build/main.sa"
+  }
+}

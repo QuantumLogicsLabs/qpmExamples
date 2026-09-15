@@ -1,0 +1,17 @@
+{
+  "name": "quantum-random",
+  "version": "1.0.0",
+  "description": "Random values for Quantum: ranged integers, shuffle, sample, weighted picks, dice rolls, UUID v4, secure passwords and a reproducible SeededRandom generator.",
+  "main": "index.sa",
+  "keywords": ["quantum", "sa", "random", "uuid", "password", "shuffle", "seed", "dice"],
+  "license": "MIT",
+  "files": ["index.sa", "README.md"],
+  "scripts": {
+    "test": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa && qrun build/test.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "entry": "test/random.test.sa",
+    "out": "build/test.sa"
+  }
+}

@@ -1,0 +1,141 @@
+# @use quantum-test
+# @use ../index.sa
+
+describe("Validate strings & numbers", fn() {
+    it("checks character classes", fn() {
+        expect(Validate.isAlpha("Quantum")).toBeTruthy()
+        expect(Validate.isAlpha("Qu4ntum")).toBeFalsy()
+        expect(Validate.isDigits("0123")).toBeTruthy()
+        expect(Validate.isAlphanumeric("abc123")).toBeTruthy()
+        expect(Validate.isAlphanumeric("abc 123")).toBeFalsy()
+        expect(Validate.isHex("DEADbeef")).toBeTruthy()
+        expect(Validate.isAlpha("")).toBeFalsy()
+    })
+    it("checks numeric strings", fn() {
+        for good in ["42", "-3.5", "+0.25", ".5", "7."] { expect(Validate.isNumeric(good)).toBeTruthy() }
+        for bad in ["", ".", "1.2.3", "12a", " 1", "--1"] { expect(Validate.isNumeric(bad)).toBeFalsy() }
+        expect(Validate.isIntegerString("-17")).toBeTruthy()
+        expect(Validate.isIntegerString("1.0")).toBeFalsy()
+        expect(Validate.inRange(5, 1, 10)).toBeTruthy()
+        expect(Validate.inRange("5", 1, 10)).toBeFalsy()
+    })
+    it("checks usernames", fn() {
+        expect(Validate.isUsername("ada_99")).toBeTruthy()
+        expect(Validate.isUsername("9lives")).toBeFalsy()
+        expect(Validate.isUsername("ab")).toBeFalsy()
+        expect(Validate.isUsername("has space")).toBeFalsy()
+    })
+})
+
+describe("Validate internet", fn() {
+    it("validates emails", fn() {
+        for good in ["ada@example.com", "first.last+tag@mail.co.uk", "x_y%z@sub.domain.io"] {
+            expect(Validate.isEmail(good)).toBeTruthy()
+        }
+        for bad in ["plain", "@example.com", "a@b", "a@@b.com", ".a@b.com", "a..b@c.com", "a@-b.com", "a@b.c", "a b@c.com"] {
+            expectNot(Validate.isEmail(bad)).toBeTruthy()
+        }
+    })
+    it("validates IP addresses", fn() {
+        expect(Validate.isIPv4("192.168.1.10")).toBeTruthy()
+        for bad in ["256.1.1.1", "1.2.3", "01.2.3.4", "a.b.c.d"] { expect(Validate.isIPv4(bad)).toBeFalsy() }
+        expect(Validate.isIPv6("2001:0db8:85a3:0000:0000:8a2e:0370:7334")).toBeTruthy()
+        expect(Validate.isIPv6("fe80::1")).toBeTruthy()
+        expect(Validate.isIPv6("::1")).toBeTruthy()
+        expect(Validate.isIPv6("1::2::3")).toBeFalsy()
+        expect(Validate.isIPv6("12345::")).toBeFalsy()
+    })
+    it("validates URLs", fn() {
+        for good in ["https://example.com", "http://localhost:3000/api?x=1", "https://sub.site.org/path#top", "http://10.0.0.1:8080"] {
+            expect(Validate.isUrl(good)).toBeTruthy()
+        }
+        for bad in ["example.com", "ftp://example.com", "https://", "http://exa mple.com", "http://host:99999", "https://user@evil.com"] {
+            expectNot(Validate.isUrl(bad)).toBeTruthy()
+        }
+        expect(Validate.isUrl("ftp://files.example.com", ["ftp"])).toBeTruthy()
+    })
+    it("validates colors, uuids and ports", fn() {
+        expect(Validate.isHexColor("#1e90ff")).toBeTruthy()
+        expect(Validate.isHexColor("#abc")).toBeTruthy()
+        expect(Validate.isHexColor("1e90ff")).toBeFalsy()
+        expect(Validate.isHexColor("#12345")).toBeFalsy()
+        expect(Validate.isUUID("123e4567-e89b-12d3-a456-426614174000")).toBeTruthy()
+        expect(Validate.isUUID("123e4567e89b12d3a456426614174000")).toBeFalsy()
+        expect(Validate.isPort("8080")).toBeTruthy()
+        expect(Validate.isPort(0)).toBeFalsy()
+    })
+})
+
+describe("Validate ids & dates", fn() {
+    it("validates phones and cards", fn() {
+        expect(Validate.isPhone("+1 (555) 123-4567")).toBeTruthy()
+        expect(Validate.isPhone("12345")).toBeFalsy()
+        expect(Validate.isPhone("555-CALL-NOW")).toBeFalsy()
+        expect(Validate.isCreditCard("4111 1111 1111 1111")).toBeTruthy()
+        expect(Validate.isCreditCard("4111 1111 1111 1112")).toBeFalsy()
+    })
+    it("validates calendar dates", fn() {
+        expect(Validate.isDate("2024-02-29")).toBeTruthy()
+        expect(Validate.isDate("2023-02-29")).toBeFalsy()
+        expect(Validate.isDate("2000-02-29")).toBeTruthy()
+        expect(Validate.isDate("1900-02-29")).toBeFalsy()
+        expect(Validate.isDate("2024-13-01")).toBeFalsy()
+        expect(Validate.isDate("2024-4-01")).toBeFalsy()
+    })
+    it("rates passwords", fn() {
+        let weak = Validate.passwordStrength("password1")
+        expect(weak["score"]).toBe(0)
+        expect(weak["suggestions"]).toContain("avoid common words like 'password'")
+        expect(Validate.passwordStrength("Tr0ub4dor&3xyz")["label"]).toBe("very strong")
+        expect(Validate.passwordStrength("abcdefgh")["label"]).toBe("weak")
+        expect(Validate.isStrongPassword("Correct-Horse-9")).toBeTruthy()
+        expect(Validate.isStrongPassword("short1A")).toBeFalsy()
+    })
+})
+
+describe("Validate.check schemas", fn() {
+    let schema = {
+        "name": {"type": "string", "required": true, "min": 2, "max": 20},
+        "age": {"type": "integer", "min": 18},
+        "email": {"type": "email", "required": true},
+        "role": {"oneOf": ["admin", "user"]},
+        "tags": {"type": "array", "max": 3, "items": {"type": "string", "min": 1}},
+        "address": {"type": "dict", "schema": {"city": {"type": "string", "required": true}}},
+        "code": {"custom": fn(v) { return v.startsWith("Q") ? true : "must start with Q" }},
+        "zip": {"type": "string", "min": 5, "message": "zip looks wrong"}
+    }
+
+    it("accepts valid data", fn() {
+        let result = Validate.check({
+            "name": "Ada", "age": 36, "email": "ada@example.com", "role": "admin",
+            "tags": ["math"], "address": {"city": "London"}, "code": "Q1"
+        }, schema)
+        expect(result["valid"]).toBeTruthy()
+        expect(result["errors"]).toEqual([])
+    })
+
+    it("reports every problem with field paths", fn() {
+        let result = Validate.check({
+            "name": "A", "age": 16.5, "role": "guest",
+            "tags": ["ok", "", "x", "y"], "address": {}, "code": "X9", "zip": "12"
+        }, schema)
+        expect(result["valid"]).toBeFalsy()
+        let messages = result["errors"].map(fn(e) { return e["message"] })
+        expect(messages).toContain("name must be at least 2 characters")
+        expect(messages).toContain("age must be an integer")
+        expect(messages).toContain("email is required")
+        expect(messages).toContain("role must be one of: admin, user")
+        expect(messages).toContain("tags must be at most 3 items")
+        expect(messages).toContain("tags[1] must be at least 1 characters")
+        expect(messages).toContain("address.city is required")
+        expect(messages).toContain("code must start with Q")
+        expect(messages).toContain("zip looks wrong")
+        expect(len(messages)).toBe(9)
+    })
+
+    it("rejects unknown types loudly", fn() {
+        expect(fn() { Validate.check({"x": 1}, {"x": {"type": "banana"}}) }).toThrow()
+    })
+})
+
+Test.report()

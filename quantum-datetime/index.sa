@@ -1,0 +1,348 @@
+# quantum-datetime — dates & times for Quantum
+#
+# Timestamps are Unix epoch seconds (UTC), the same numbers `time()` returns.
+#
+#   t = DateTime.parse("2024-03-05T14:30:00Z")
+#   DateTime.format(t, "dddd, MMMM D YYYY h:mm A")   # "Tuesday, March 5 2024 2:30 PM"
+#   DateTime.addMonths(t, 1)
+#   DateTime.relative(t, DateTime.now())              # e.g. "3 years ago"
+#   DateTime.formatDuration(3725)                     # "1h 2m 5s"
+#
+# All calculations are UTC; pass an offset in minutes to toLocal() for a zone.
+# Exposes the global: DateTime
+
+class __QDateTime {
+    fn init() {
+        self.MINUTE = 60
+        self.HOUR = 3600
+        self.DAY = 86400
+        self.WEEK = 604800
+        self.MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+        self.DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    }
+
+    fn fdiv(a, b) { return floor(a / b) }
+    fn mod(a, n) { return ((a % n) + n) % n }
+
+    fn pad(n, width) {
+        let s = str(floor(abs(n)))
+        while len(s) < width { s = "0" + s }
+        return n < 0 ? "-" + s : s
+    }
+
+    # ── calendar math ────────────────────────────────────────────────────
+
+    fn now() { return time() }
+
+    fn isLeapYear(y) {
+        return (y % 4 == 0 and y % 100 != 0) or y % 400 == 0
+    }
+
+    fn daysInMonth(year, month) {
+        let days = [31, self.isLeapYear(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        return days[month - 1]
+    }
+
+    # Days since 1970-01-01 for a civil date (proleptic Gregorian).
+    fn daysFromCivil(y, m, d) {
+        if m <= 2 { y -= 1 }
+        let era = self.fdiv(y, 400)
+        let yoe = y - era * 400
+        let mp = m > 2 ? m - 3 : m + 9
+        let doy = self.fdiv(153 * mp + 2, 5) + d - 1
+        let doe = yoe * 365 + self.fdiv(yoe, 4) - self.fdiv(yoe, 100) + doy
+        return era * 146097 + doe - 719468
+    }
+
+    fn civilFromDays(z) {
+        z += 719468
+        let era = self.fdiv(z, 146097)
+        let doe = z - era * 146097
+        let yoe = self.fdiv(doe - self.fdiv(doe, 1460) + self.fdiv(doe, 36524) - self.fdiv(doe, 146096), 365)
+        let doy = doe - (365 * yoe + self.fdiv(yoe, 4) - self.fdiv(yoe, 100))
+        let mp = self.fdiv(5 * doy + 2, 153)
+        let d = doy - self.fdiv(153 * mp + 2, 5) + 1
+        let m = mp < 10 ? mp + 3 : mp - 9
+        let y = yoe + era * 400
+        if m <= 2 { y += 1 }
+        return [y, m, d]
+    }
+
+    # Epoch seconds from parts; month is 1-12. Out-of-range values roll over.
+    fn fromParts(year, month, day, hour, minute, second) {
+        if month == null { month = 1 }
+        if day == null { day = 1 }
+        if hour == null { hour = 0 }
+        if minute == null { minute = 0 }
+        if second == null { second = 0 }
+        let y = year + self.fdiv(month - 1, 12)
+        let m = self.mod(month - 1, 12) + 1
+        return (self.daysFromCivil(y, m, 1) + day - 1) * self.DAY + hour * self.HOUR + minute * self.MINUTE + second
+    }
+
+    # {"year", "month", "day", "hour", "minute", "second", "weekday" (0 = Sunday), "dayOfYear"}
+    fn toParts(t) {
+        let days = self.fdiv(t, self.DAY)
+        let secs = t - days * self.DAY
+        let ymd = self.civilFromDays(days)
+        return {
+            "year": ymd[0],
+            "month": ymd[1],
+            "day": ymd[2],
+            "hour": self.fdiv(secs, self.HOUR),
+            "minute": self.fdiv(self.mod(secs, self.HOUR), self.MINUTE),
+            "second": floor(self.mod(secs, self.MINUTE)),
+            "weekday": self.mod(days + 4, 7),
+            "dayOfYear": days - self.daysFromCivil(ymd[0], 1, 1) + 1
+        }
+    }
+
+    # Shifts a UTC timestamp by a zone offset (e.g. +300 for UTC+5).
+    fn toLocal(t, offsetMinutes) {
+        return t + offsetMinutes * self.MINUTE
+    }
+
+    # ── parsing & formatting ─────────────────────────────────────────────
+
+    # Accepts "YYYY-MM-DD", "YYYY-MM-DD HH:MM[:SS]", "YYYY-MM-DDTHH:MM[:SS][.fff][Z|±HH:MM]".
+    # Returns epoch seconds, or null when the text is not a valid date.
+    fn parse(text) {
+        let s = text.trim()
+        if len(s) < 10 or s[4] != "-" or s[7] != "-" { return null }
+        let y = self.toInt(s.slice(0, 4))
+        let mo = self.toInt(s.slice(5, 7))
+        let d = self.toInt(s.slice(8, 10))
+        if y == null or mo == null or d == null { return null }
+        if mo < 1 or mo > 12 or d < 1 or d > self.daysInMonth(y, mo) { return null }
+
+        let h = 0
+        let mi = 0
+        let sec = 0
+        let offset = 0
+        let rest = s.slice(10)
+        if rest != "" {
+            if rest[0] != "T" and rest[0] != " " { return null }
+            rest = rest.slice(1)
+            if len(rest) < 5 or rest[2] != ":" { return null }
+            h = self.toInt(rest.slice(0, 2))
+            mi = self.toInt(rest.slice(3, 5))
+            rest = rest.slice(5)
+            if len(rest) >= 3 and rest[0] == ":" {
+                sec = self.toInt(rest.slice(1, 3))
+                rest = rest.slice(3)
+            }
+            if len(rest) > 0 and rest[0] == "." {
+                let i = 1
+                while i < len(rest) and rest[i].isdigit() { i += 1 }
+                rest = rest.slice(i)
+            }
+            if h == null or mi == null or sec == null or h > 23 or mi > 59 or sec > 59 { return null }
+            if rest == "Z" or rest == "z" {
+                rest = ""
+            } else if len(rest) == 6 and (rest[0] == "+" or rest[0] == "-") and rest[3] == ":" {
+                let oh = self.toInt(rest.slice(1, 3))
+                let om = self.toInt(rest.slice(4, 6))
+                if oh == null or om == null { return null }
+                offset = (oh * 60 + om) * (rest[0] == "+" ? 1 : -1)
+                rest = ""
+            }
+            if rest != "" { return null }
+        }
+        return self.fromParts(y, mo, d, h, mi, sec) - offset * self.MINUTE
+    }
+
+    fn toInt(s) {
+        if s == "" { return null }
+        for ch in s.chars() {
+            if not ch.isdigit() { return null }
+        }
+        return num(s)
+    }
+
+    # "2024-03-05T14:30:00Z"
+    fn toISO(t) {
+        return self.format(t, "YYYY-MM-DDTHH:mm:ss") + "Z"
+    }
+
+    # Tokens: YYYY YY MMMM MMM MM M DD D dddd ddd HH H hh h mm m ss s A a
+    # Wrap literal text in [brackets]: "[Today is] dddd".
+    fn format(t, pattern) {
+        let p = self.toParts(t)
+        let hour12 = self.mod(p["hour"], 12)
+        if hour12 == 0 { hour12 = 12 }
+        let values = {
+            "YYYY": self.pad(p["year"], 4),
+            "YY": self.pad(self.mod(p["year"], 100), 2),
+            "MMMM": self.MONTH_NAMES[p["month"] - 1],
+            "MMM": self.MONTH_NAMES[p["month"] - 1].slice(0, 3),
+            "MM": self.pad(p["month"], 2),
+            "M": str(p["month"]),
+            "DD": self.pad(p["day"], 2),
+            "D": str(p["day"]),
+            "dddd": self.DAY_NAMES[p["weekday"]],
+            "ddd": self.DAY_NAMES[p["weekday"]].slice(0, 3),
+            "HH": self.pad(p["hour"], 2),
+            "H": str(p["hour"]),
+            "hh": self.pad(hour12, 2),
+            "h": str(hour12),
+            "mm": self.pad(p["minute"], 2),
+            "m": str(p["minute"]),
+            "ss": self.pad(p["second"], 2),
+            "s": str(p["second"]),
+            "A": p["hour"] < 12 ? "AM" : "PM",
+            "a": p["hour"] < 12 ? "am" : "pm"
+        }
+        let tokens = ["YYYY", "MMMM", "dddd", "MMM", "ddd", "YY", "MM", "DD", "HH", "hh", "mm", "ss", "M", "D", "H", "h", "m", "s", "A", "a"]
+        let out = ""
+        let i = 0
+        while i < len(pattern) {
+            if pattern[i] == "[" {
+                let close = pattern.slice(i).indexOf("]")
+                if close != -1 {
+                    out += pattern.slice(i + 1, i + close)
+                    i += close + 1
+                    continue
+                }
+            }
+            let matched = false
+            for tok in tokens {
+                if not matched and pattern.slice(i, i + len(tok)) == tok {
+                    out += values[tok]
+                    i += len(tok)
+                    matched = true
+                }
+            }
+            if not matched {
+                out += pattern[i]
+                i += 1
+            }
+        }
+        return out
+    }
+
+    # ── arithmetic ───────────────────────────────────────────────────────
+
+    fn addSeconds(t, n) { return t + n }
+    fn addMinutes(t, n) { return t + n * self.MINUTE }
+    fn addHours(t, n) { return t + n * self.HOUR }
+    fn addDays(t, n) { return t + n * self.DAY }
+    fn addWeeks(t, n) { return t + n * self.WEEK }
+
+    # Keeps the time of day; clamps the day (Jan 31 + 1 month -> Feb 29 in a leap year).
+    fn addMonths(t, n) {
+        let p = self.toParts(t)
+        let total = p["year"] * 12 + (p["month"] - 1) + n
+        let y = self.fdiv(total, 12)
+        let m = self.mod(total, 12) + 1
+        let d = min(p["day"], self.daysInMonth(y, m))
+        return self.fromParts(y, m, d, p["hour"], p["minute"], p["second"])
+    }
+
+    fn addYears(t, n) { return self.addMonths(t, n * 12) }
+
+    # Whole units between a and b (b - a): "seconds" "minutes" "hours" "days" "weeks" "months" "years"
+    fn diff(a, b, unit) {
+        if unit == null { unit = "seconds" }
+        let seconds = b - a
+        let sizes = {"seconds": 1, "minutes": self.MINUTE, "hours": self.HOUR, "days": self.DAY, "weeks": self.WEEK}
+        if unit in sizes {
+            let value = seconds / sizes[unit]
+            return value < 0 ? -floor(-value) : floor(value)
+        }
+        if unit == "months" or unit == "years" {
+            let pa = self.toParts(a)
+            let pb = self.toParts(b)
+            let months = (pb["year"] - pa["year"]) * 12 + (pb["month"] - pa["month"])
+            let restA = pa["day"] * self.DAY + (a - self.fdiv(a, self.DAY) * self.DAY)
+            let restB = pb["day"] * self.DAY + (b - self.fdiv(b, self.DAY) * self.DAY)
+            if months > 0 and restB < restA { months -= 1 }
+            if months < 0 and restB > restA { months += 1 }
+            return unit == "months" ? months : (months < 0 ? -floor(-months / 12) : floor(months / 12))
+        }
+        raise "DateTime.diff: unknown unit '" + unit + "'"
+    }
+
+    fn startOfDay(t) { return self.fdiv(t, self.DAY) * self.DAY }
+    fn endOfDay(t) { return self.startOfDay(t) + self.DAY - 1 }
+
+    fn startOfMonth(t) {
+        let p = self.toParts(t)
+        return self.fromParts(p["year"], p["month"], 1)
+    }
+
+    fn endOfMonth(t) {
+        return self.addMonths(self.startOfMonth(t), 1) - 1
+    }
+
+    # Weeks start on Monday by default; pass 0 to start on Sunday.
+    fn startOfWeek(t, firstDay) {
+        if firstDay == null { firstDay = 1 }
+        let back = self.mod(self.toParts(t)["weekday"] - firstDay, 7)
+        return self.startOfDay(t) - back * self.DAY
+    }
+
+    fn isWeekend(t) {
+        let wd = self.toParts(t)["weekday"]
+        return wd == 0 or wd == 6
+    }
+
+    fn isSameDay(a, b) {
+        return self.fdiv(a, self.DAY) == self.fdiv(b, self.DAY)
+    }
+
+    # Completed years between birth and now.
+    fn age(birth, nowTs) {
+        if nowTs == null { nowTs = self.now() }
+        return self.diff(birth, nowTs, "years")
+    }
+
+    # ── human-friendly output ────────────────────────────────────────────
+
+    # "just now", "5 minutes ago", "in 3 days"
+    fn relative(t, nowTs) {
+        if nowTs == null { nowTs = self.now() }
+        let delta = t - nowTs
+        let secs = abs(delta)
+        if secs < 45 { return "just now" }
+        let units = [
+            ["year", 365 * self.DAY],
+            ["month", 30 * self.DAY],
+            ["week", self.WEEK],
+            ["day", self.DAY],
+            ["hour", self.HOUR],
+            ["minute", self.MINUTE]
+        ]
+        let label = "1 minute"
+        for u in units {
+            if label == "1 minute" and secs >= u[1] {
+                let count = round(secs / u[1])
+                label = str(count) + " " + u[0] + (count == 1 ? "" : "s")
+            }
+        }
+        return delta < 0 ? label + " ago" : "in " + label
+    }
+
+    # 90061 -> "1d 1h 1m 1s"; zero parts are skipped.
+    fn formatDuration(seconds) {
+        seconds = floor(abs(seconds))
+        if seconds == 0 { return "0s" }
+        let parts = []
+        let spec = [["d", self.DAY], ["h", self.HOUR], ["m", self.MINUTE], ["s", 1]]
+        for u in spec {
+            let n = self.fdiv(seconds, u[1])
+            if n > 0 {
+                parts.push(str(n) + u[0])
+                seconds -= n * u[1]
+            }
+        }
+        return parts.join(" ")
+    }
+
+    # 3725 -> "01:02:05"
+    fn formatClock(seconds) {
+        seconds = floor(abs(seconds))
+        return self.pad(self.fdiv(seconds, self.HOUR), 2) + ":" + self.pad(self.fdiv(self.mod(seconds, self.HOUR), self.MINUTE), 2) + ":" + self.pad(self.mod(seconds, self.MINUTE), 2)
+    }
+}
+
+DateTime = __QDateTime()
