@@ -1,0 +1,14 @@
+{
+  "name": "power",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.sa",
+  "scripts": {
+    "start": "qrun main.sa"
+  },
+  "keywords": [
+    "exponentianoal"
+  ],
+  "author": "Muhammad Saad Amin",
+  "license": "MIT"
+}
