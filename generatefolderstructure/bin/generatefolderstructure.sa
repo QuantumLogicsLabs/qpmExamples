@@ -1,0 +1,79 @@
+# generatefolderstructure — command-line entry point
+#
+#   generatefolderstructure            -> ./folder-structure.txt  (tree of the current folder)
+#   generatefolderstructure --json     -> ./folder-structure.json
+#   generatefolderstructure docs       -> tree of ./docs, still written to the current folder
+#
+# Installed with qpm, the command runs this file via qrun; from a checkout,
+# run `qrun bin/generatefolderstructure.sa [folder] [--json]`.
+
+# @use ../index.sa
+
+# Quantum has no exit(); an uncaught raise is what gives a non-zero exit code.
+fn __gfsFail(message) {
+    raise "[generatefolderstructure] " + message
+}
+
+fn __gfsPlural(n, word) {
+    return str(n) + " " + word + (n == 1 ? "" : "s")
+}
+
+fn __gfsUsage() {
+    return [
+        "usage: generatefolderstructure [folder] [--json]",
+        "",
+        "  folder   folder to map (default: the current folder)",
+        "  --json   write folder-structure.json instead of folder-structure.txt",
+        "",
+        "Skipped (listed, not opened): " + FolderStructure.DEFAULT_SKIP.join(", ")
+    ].join("\n")
+}
+
+fn __gfsMain() {
+    let asJson = false
+    let root = null
+    for arg in sys.argv.slice(1) {
+        if arg == "--json" {
+            asJson = true
+        } else if arg == "--help" or arg == "-h" {
+            print(__gfsUsage())
+            return
+        } else if arg.startsWith("-") {
+            __gfsFail("unknown option " + arg + "\n\n" + __gfsUsage())
+        } else if root != null {
+            __gfsFail("only one folder can be given (got " + root + " and " + arg + ")")
+        } else {
+            root = arg
+        }
+    }
+    if root == null { root = "." }
+
+    let outFile = asJson ? "folder-structure.json" : "folder-structure.txt"
+
+    # Leave our own output files out of the tree, so re-running gives the same result.
+    let rootAbs = os.path.abspath(root)
+    let omit = []
+    for generated in ["folder-structure.txt", "folder-structure.json"] {
+        let genAbs = os.path.abspath(generated)
+        if genAbs.lower().startsWith(rootAbs.lower() + "/") {
+            omit.push(genAbs.slice(len(rootAbs) + 1))
+        }
+    }
+
+    let tree = null
+    try {
+        tree = FolderStructure.walk(root, {"omit": omit})
+    } catch (e) {
+        __gfsFail(str(e))
+    }
+
+    let text = asJson ? FolderStructure.toJson(tree) : FolderStructure.toText(tree)
+    if not write_file(outFile, text) {
+        __gfsFail("cannot write " + outFile)
+    }
+    let totals = FolderStructure.count(tree)
+    let summary = __gfsPlural(totals["directories"], "folder") + ", " + __gfsPlural(totals["files"], "file")
+    print("[generatefolderstructure] " + tree["name"] + "/ -> " + outFile + " (" + summary + ")")
+}
+
+__gfsMain()

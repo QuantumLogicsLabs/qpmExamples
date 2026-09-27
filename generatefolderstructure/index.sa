@@ -1,0 +1,180 @@
+# generatefolderstructure — library
+#
+#   let tree = FolderStructure.walk(".", null)
+#   write_file("folder-structure.txt", FolderStructure.toText(tree))
+#   write_file("folder-structure.json", FolderStructure.toJson(tree))
+#
+# toText renders the familiar tree layout:
+#
+#   compiler/
+#   ├── .git/  [skipped]
+#   ├── docs/
+#   │   └── SYNTAX.md
+#   └── README.md
+#
+# Folders are listed before files, each group sorted case-insensitively.
+# Folders named in `skip` are listed but not opened.
+# Exposes the global: FolderStructure
+
+class __QFolderStructure {
+    fn init() {
+        self.DEFAULT_SKIP = [".git", "node_modules", "build"]
+    }
+
+    # ── walking ──────────────────────────────────────────────────────────
+
+    # Returns the tree rooted at `root`. Every node is a dict:
+    #   {"name", "type": "directory"|"file", "children": [...] (directories),
+    #    "skipped": true|false, "error": message or null}
+    # options:
+    #   "skip": folder names to list but not open (default DEFAULT_SKIP)
+    #   "omit": paths relative to root to leave out entirely, e.g. the output file
+    fn walk(root, options) {
+        if options == null { options = {} }
+        let skip = {}
+        for name in options.get("skip", self.DEFAULT_SKIP) { skip[name] = true }
+        let omit = {}
+        for rel in options.get("omit", []) { omit[rel.replaceAll("\\", "/")] = true }
+
+        let rootPath = os.path.abspath(root)
+        if not os.path.isdir(rootPath) {
+            raise "not a folder: " + root
+        }
+        let name = os.path.basename(rootPath)
+        if name == "" { name = rootPath }
+        let node = self.directoryNode(name, false)
+        self.fill(node, rootPath, "", skip, omit)
+        return node
+    }
+
+    fn directoryNode(name, skipped) {
+        return {"name": name, "type": "directory", "children": [], "skipped": skipped, "error": null}
+    }
+
+    fn fill(node, path, rel, skip, omit) {
+        let names = null
+        try {
+            names = os.listdir(path)
+        } catch (e) {
+            node["error"] = str(e)
+            return
+        }
+
+        let dirs = []
+        let files = []
+        for name in names {
+            let childRel = rel == "" ? name : rel + "/" + name
+            if childRel in omit { continue }
+            if os.path.isdir(path + "/" + name) {
+                dirs.push(name)
+            } else {
+                files.push(name)
+            }
+        }
+
+        for name in self.sortNames(dirs) {
+            let child = self.directoryNode(name, name in skip)
+            if not child["skipped"] {
+                self.fill(child, path + "/" + name, rel == "" ? name : rel + "/" + name, skip, omit)
+            }
+            node["children"].push(child)
+        }
+        for name in self.sortNames(files) {
+            node["children"].push({"name": name, "type": "file"})
+        }
+    }
+
+    # Case-insensitive, ties broken by the exact name. arr.sort() takes no
+    # comparator, so sort "lowercase<SOH>original" keys and strip the prefix.
+    fn sortNames(names) {
+        let sep = chr(1)
+        let keys = []
+        for name in names { keys.push(name.lower() + sep + name) }
+        keys.sort()
+        let out = []
+        for key in keys { out.push(key.slice(key.indexOf(sep) + 1)) }
+        return out
+    }
+
+    # {"directories": n, "files": n}, not counting the root itself.
+    fn count(node) {
+        let totals = {"directories": 0, "files": 0}
+        self.addCounts(node, totals)
+        return totals
+    }
+
+    fn addCounts(node, totals) {
+        for child in node.get("children", []) {
+            if child["type"] == "directory" {
+                totals["directories"] += 1
+                self.addCounts(child, totals)
+            } else {
+                totals["files"] += 1
+            }
+        }
+    }
+
+    # ── text output ──────────────────────────────────────────────────────
+
+    fn toText(tree) {
+        let lines = [tree["name"] + "/"]
+        self.textLines(tree, "", lines)
+        return lines.join("\n") + "\n"
+    }
+
+    fn textLines(node, prefix, lines) {
+        let children = node["children"]
+        for i in range(len(children)) {
+            let child = children[i]
+            let last = i == len(children) - 1
+            let label = child["name"]
+            if child["type"] == "directory" {
+                label += "/"
+                if child["skipped"] { label += "  [skipped]" }
+                if child["error"] != null { label += "  [unreadable]" }
+            }
+            lines.push(prefix + (last ? "└── " : "├── ") + label)
+            if child["type"] == "directory" {
+                self.textLines(child, prefix + (last ? "    " : "│   "), lines)
+            }
+        }
+    }
+
+    # ── JSON output ──────────────────────────────────────────────────────
+
+    # Hand-built rather than JSON.stringify: dict key order isn't stable, and
+    # "name"/"type" should read first.
+    fn toJson(tree) {
+        return self.jsonNode(tree, "") + "\n"
+    }
+
+    fn jsonNode(node, pad) {
+        let inner = pad + "  "
+        let fields = [
+            inner + "\"name\": " + self.jsonString(node["name"]),
+            inner + "\"type\": " + self.jsonString(node["type"])
+        ]
+        if node["type"] == "directory" {
+            if node["skipped"] { fields.push(inner + "\"skipped\": true") }
+            if node["error"] != null { fields.push(inner + "\"error\": " + self.jsonString(node["error"])) }
+            if not node["skipped"] and node["error"] == null {
+                let items = []
+                for child in node["children"] { items.push(self.jsonNode(child, inner + "  ")) }
+                if len(items) == 0 {
+                    fields.push(inner + "\"children\": []")
+                } else {
+                    fields.push(inner + "\"children\": [\n" + items.join(",\n") + "\n" + inner + "]")
+                }
+            }
+        }
+        return pad + "{\n" + fields.join(",\n") + "\n" + pad + "}"
+    }
+
+    fn jsonString(s) {
+        s = s.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"")
+        s = s.replaceAll("\n", "\\n").replaceAll("\r", "\\r").replaceAll("\t", "\\t")
+        return "\"" + s + "\""
+    }
+}
+
+FolderStructure = __QFolderStructure()

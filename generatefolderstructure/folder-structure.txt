@@ -1,0 +1,20 @@
+generatefolderstructure/
+├── bin/
+│   └── generatefolderstructure.sa
+├── build/  [skipped]
+├── test/
+│   ├── fixture/
+│   │   ├── skipme/
+│   │   │   └── hidden.txt
+│   │   ├── src/
+│   │   │   ├── lib/
+│   │   │   │   └── util.txt
+│   │   │   └── main.txt
+│   │   ├── zeta/
+│   │   │   └── note.txt
+│   │   ├── alpha.md
+│   │   └── Beta.txt
+│   └── folderstructure.test.sa
+├── index.sa
+├── package.json
+└── README.md

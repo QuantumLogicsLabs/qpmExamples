@@ -1,0 +1,84 @@
+# @use quantum-test
+# @use ../index.sa
+
+# Run from the package folder (qpm run test), so paths are relative to it.
+let FIXTURE = "test/fixture"
+
+fn childNames(node) {
+    let names = []
+    for child in node["children"] { names.push(child["name"]) }
+    return names
+}
+
+describe("FolderStructure.walk", fn() {
+    it("lists folders first, each group sorted case-insensitively", fn() {
+        let tree = FolderStructure.walk(FIXTURE, {"skip": ["skipme"]})
+        expect(tree["name"]).toBe("fixture")
+        expect(childNames(tree)).toEqual(["skipme", "src", "zeta", "alpha.md", "Beta.txt"])
+        expect(childNames(tree["children"][1])).toEqual(["lib", "main.txt"])
+    })
+    it("lists skipped folders without opening them", fn() {
+        let tree = FolderStructure.walk(FIXTURE, {"skip": ["skipme"]})
+        let skipped = tree["children"][0]
+        expect(skipped["skipped"]).toBe(true)
+        expect(skipped["children"]).toEqual([])
+    })
+    it("opens every folder when skip is empty", fn() {
+        let tree = FolderStructure.walk(FIXTURE, {"skip": []})
+        expect(childNames(tree["children"][0])).toEqual(["hidden.txt"])
+    })
+    it("leaves out omitted paths, given relative to the root", fn() {
+        let tree = FolderStructure.walk(FIXTURE, {"skip": ["skipme"], "omit": ["src/lib", "Beta.txt"]})
+        expect(childNames(tree)).toEqual(["skipme", "src", "zeta", "alpha.md"])
+        expect(childNames(tree["children"][1])).toEqual(["main.txt"])
+    })
+    it("counts folders and files below the root", fn() {
+        let tree = FolderStructure.walk(FIXTURE, {"skip": ["skipme"]})
+        expect(FolderStructure.count(tree)).toEqual({"directories": 4, "files": 5})
+    })
+    it("rejects a path that is not a folder", fn() {
+        expect(fn() { FolderStructure.walk(FIXTURE + "/alpha.md", null) }).toThrow()
+        expect(fn() { FolderStructure.walk(FIXTURE + "/missing", null) }).toThrow()
+    })
+})
+
+describe("FolderStructure.toText", fn() {
+    it("draws the tree with folder slashes and [skipped] markers", fn() {
+        let tree = FolderStructure.walk(FIXTURE, {"skip": ["skipme"]})
+        expect(FolderStructure.toText(tree)).toBe([
+            "fixture/",
+            "├── skipme/  [skipped]",
+            "├── src/",
+            "│   ├── lib/",
+            "│   │   └── util.txt",
+            "│   └── main.txt",
+            "├── zeta/",
+            "│   └── note.txt",
+            "├── alpha.md",
+            "└── Beta.txt",
+            ""
+        ].join("\n"))
+    })
+})
+
+describe("FolderStructure.toJson", fn() {
+    it("writes JSON that parses back to the same tree", fn() {
+        let tree = FolderStructure.walk(FIXTURE, {"skip": ["skipme"]})
+        let parsed = JSON.parse(FolderStructure.toJson(tree))
+        expect(parsed["name"]).toBe("fixture")
+        expect(parsed["type"]).toBe("directory")
+        expect(parsed["children"][0]).toEqual({"name": "skipme", "type": "directory", "skipped": true})
+        expect(parsed["children"][4]).toEqual({"name": "Beta.txt", "type": "file"})
+        expect(parsed["children"][1]["children"][0]["children"][0]["name"]).toBe("util.txt")
+    })
+    it("puts name and type first", fn() {
+        let tree = FolderStructure.walk(FIXTURE, {"skip": ["skipme"]})
+        let lines = FolderStructure.toJson(tree).split("\n")
+        expect(lines.slice(0, 4)).toEqual(["{", "  \"name\": \"fixture\",", "  \"type\": \"directory\",", "  \"children\": ["])
+    })
+    it("escapes quotes and backslashes in names", fn() {
+        expect(FolderStructure.jsonString("a\"b\\c")).toBe("\"a\\\"b\\\\c\"")
+    })
+})
+
+Test.report()

@@ -17,6 +17,7 @@ Reusable Quantum Language libraries, packaged for qpm. Each one is a folder with
 | [quantum-events](quantum-events) | `EventEmitter` `Store` `StateMachine` | pub/sub, Redux-style store, state machines |
 | [quantum-test](quantum-test) | `describe` `it` `expect` | unit testing (used by every package's tests) |
 | [quantum-bundle](quantum-bundle) | `Bundler` | makes packages usable today (see below) |
+| [generatefolderstructure](generatefolderstructure) | `FolderStructure` | CLI: writes the project tree to `folder-structure.txt`, or `folder-structure.json` with `--json` |
 
 [qpm-test-sa](qpm-test-sa) is a demo project that uses nine of them together to
 turn a CSV into a terminal sales report.
@@ -101,4 +102,4 @@ These were found while building and testing the packages against the current
 | No `exit()` and no rest parameters (`...args`) | `exit` isn't a native; an uncaught `raise` exits with code 1. |
 | Save files as UTF-8 **without** BOM | The lexer rejects a BOM. |
 | ANSI escapes: use `"["` | `"\033"` and `"\x1b"` are not decoded. |
-| `os.path.exists` is false for directories; `write_file` does not create folders | Create output folders in your script (`if not exist build mkdir build`). |
+| `os.path.exists` is false for directories; `write_file` does not create folders | Use `os.path.isdir` to test for a folder. Create output folders in your script (`if not exist build mkdir build`). |

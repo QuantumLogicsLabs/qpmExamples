@@ -1,0 +1,22 @@
+{
+  "name": "generatefolderstructure",
+  "version": "1.0.0",
+  "description": "Writes a project's folder structure to folder-structure.txt as a tree, or to folder-structure.json with --json.",
+  "main": "index.sa",
+  "bin": {
+    "generatefolderstructure": "bin/generatefolderstructure.sa"
+  },
+  "keywords": ["quantum", "sa", "tree", "folder", "structure", "cli"],
+  "license": "MIT",
+  "files": ["bin/", "index.sa", "README.md"],
+  "scripts": {
+    "start": "qrun bin/generatefolderstructure.sa",
+    "json": "qrun bin/generatefolderstructure.sa --json",
+    "test": "(if not exist build mkdir build) && qrun ../quantum-bundle/bin/bundle.sa && qrun build/test.sa"
+  },
+  "quantum": {
+    "paths": [".."],
+    "entry": "test/folderstructure.test.sa",
+    "out": "build/test.sa"
+  }
+}
