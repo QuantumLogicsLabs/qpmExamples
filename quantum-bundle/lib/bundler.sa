@@ -5,7 +5,8 @@
 # `# @use <spec>` comment directives and inlines every dependency, in
 # dependency order, into one standalone .sa file that `qrun` can execute.
 #
-#   # @use quantum-strings          -> node_modules/quantum-strings/<main>
+#   # @use quantum-strings          -> quantum_qubits/quantum-strings/<main>
+#                                      (or node_modules/, where older qpm put packages)
 #   # @use quantum-strings/extra.sa -> a file inside that package
 #   # @use ./helpers.sa             -> relative to the current file
 #
@@ -144,7 +145,8 @@ class __QBundler {
 
         let root = options.get("root", ".")
         let pkg = self.parsePackageSpec(spec)
-        let searchDirs = [self.join(root, "node_modules")]
+        # qpm installs Quantum packages into quantum_qubits (older versions used node_modules).
+        let searchDirs = [self.join(root, "quantum_qubits"), self.join(root, "node_modules")]
         for extra in options.get("paths", []) {
             searchDirs.push(self.join(root, extra))
         }

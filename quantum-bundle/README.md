@@ -4,7 +4,7 @@ Makes qpm packages usable in Quantum projects today. Quantum doesn't load module
 
 ```python
 # src/main.sa
-# @use quantum-strings              -> node_modules/quantum-strings/<main from package.json>
+# @use quantum-strings              -> quantum_qubits/quantum-strings/<main from package.json>
 # @use quantum-strings/extra.sa     -> a specific file inside a package
 # @use ./helpers.sa                 -> relative to this file
 
@@ -14,7 +14,7 @@ print(Strings.titleCase("hello"))
 ```json
 {
   "scripts": {
-    "start": "(if not exist build mkdir build) && qrun node_modules/quantum-bundle/bin/bundle.sa && qrun build/main.sa"
+    "start": "(if not exist build mkdir build) && qrun quantum_qubits/quantum-bundle/bin/bundle.sa && qrun build/main.sa"
   },
   "quantum": {
     "entry": "src/main.sa",
@@ -36,7 +36,7 @@ qpm run start
 |---|---|
 | `entry`, `out` | a single bundle (default `out`: `build/<entry file name>`) |
 | `bundles` | several bundles: `[{"entry": "...", "out": "..."}]` |
-| `paths` | extra folders to search for packages after `node_modules`, e.g. `[".."]` for sibling folders |
+| `paths` | extra folders to search for packages after `quantum_qubits` (and `node_modules`), e.g. `[".."]` for sibling folders |
 
 ## How it works
 
