@@ -18,7 +18,7 @@
 
 class __QFolderStructure {
     fn init() {
-        self.DEFAULT_SKIP = [".git", "node_modules", "build"]
+        self.DEFAULT_SKIP = [".git", "node_modules", "quantum_qubits", "build"]
     }
 
     # ── walking ──────────────────────────────────────────────────────────

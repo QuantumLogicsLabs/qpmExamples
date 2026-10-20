@@ -8,4 +8,4 @@ qpm run start
 
 Uses quantum-csv, quantum-validate, quantum-collections, quantum-math, quantum-strings, quantum-datetime, quantum-term, quantum-loops and quantum-events. See the `# @use` lines in [src/main.sa](src/main.sa) and the relative include of [src/report.sa](src/report.sa).
 
-`"paths": [".."]` in `package.json` lets the bundler find the packages as sibling folders. In a real project you would `qpm install` them into `node_modules` and drop `paths`.
+`"paths": [".."]` in `package.json` lets the bundler find the packages as sibling folders. In a real project you would `qpm install` them into `quantum_qubits` and drop `paths`.

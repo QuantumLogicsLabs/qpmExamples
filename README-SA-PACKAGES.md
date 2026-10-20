@@ -43,13 +43,13 @@ nothing), so packages are combined ahead of time by **quantum-bundle**:
    ```json
    {
      "scripts": {
-       "start": "(if not exist build mkdir build) && qrun node_modules/quantum-bundle/bin/bundle.sa && qrun build/main.sa"
+       "start": "(if not exist build mkdir build) && qrun quantum_qubits/quantum-bundle/bin/bundle.sa && qrun build/main.sa"
      },
      "quantum": { "entry": "src/main.sa", "out": "build/main.sa" }
    }
    ```
 
-   Packages resolve from `node_modules/<name>` (where `qpm install` puts them).
+   Packages resolve from `quantum_qubits/<name>` (where `qpm install` puts them).
    To use them straight from this folder instead, add `"paths": [".."]` (or the
    path to `qpmexamples`) and call `../quantum-bundle/bin/bundle.sa`, as
    [qpm-test-sa/package.json](qpm-test-sa/package.json) does.

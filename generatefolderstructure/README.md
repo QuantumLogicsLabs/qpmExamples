@@ -31,7 +31,7 @@ compiler/
 ```
 
 - Folders end in `/` and come before files. Each group is sorted case-insensitively.
-- `.git`, `node_modules` and `build` are listed as `[skipped]` and are not opened.
+- `.git`, `node_modules`, `quantum_qubits` and `build` are listed as `[skipped]` and are not opened.
 - A folder that can't be read is shown as `[unreadable]`.
 
 ## JSON output
@@ -78,7 +78,7 @@ print(FolderStructure.toText(tree))
 | `walk(root, options)` | builds the tree. `skip`: folder names to list but not open (default `DEFAULT_SKIP`). `omit`: paths relative to `root` to leave out. |
 | `toText(tree)` / `toJson(tree)` | render the tree as text or JSON |
 | `count(tree)` | `{"directories": n, "files": n}` below the root |
-| `DEFAULT_SKIP` | `[".git", "node_modules", "build"]` |
+| `DEFAULT_SKIP` | `[".git", "node_modules", "quantum_qubits", "build"]` |
 
 ## Tests
 
